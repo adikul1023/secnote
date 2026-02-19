@@ -14,9 +14,6 @@ jobs:
   audit:
     name: Security audit (cargo audit)
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: secure-notes
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -29,9 +26,6 @@ jobs:
   deny:
     name: Dependency policy (cargo deny)
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: secure-notes
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -44,9 +38,6 @@ jobs:
   clippy:
     name: Lint (cargo clippy)
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: secure-notes
     env:
       RUSTFLAGS: "-D warnings"
     steps:
@@ -55,18 +46,12 @@ jobs:
         with:
           components: clippy
       - name: Run cargo clippy
-        # -D warnings turns every warning into a hard error.
-        # This catches: accidental Clone derives on sensitive types,
-        # dead_code, unused imports, etc.
         run: cargo clippy -- -D warnings
 
   # ── Tests ──────────────────────────────────────────────────────────────────
   test:
     name: Tests (cargo test)
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: secure-notes
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
