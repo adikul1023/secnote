@@ -448,7 +448,7 @@ impl LockScreen {
         if self.recovery_failures < RECOVERY_MAX_ATTEMPTS {
             // Exponential backoff: 2^(failures-1) seconds, capped at 60s
             let delay_secs = RECOVERY_BASE_DELAY_SECS
-                .checked_shl((self.recovery_failures - 1) as u32)
+                .checked_shl(self.recovery_failures - 1)
                 .unwrap_or(u64::MAX)
                 .min(RECOVERY_MAX_DELAY_SECS);
             self.recovery_locked_until =

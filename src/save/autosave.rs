@@ -26,6 +26,7 @@ use crate::store::notes::{AppSettings, NotesStore};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SaveStatus {
     Idle,
+    #[allow(dead_code)]
     Saving,
     Saved,
     Error,
@@ -58,6 +59,7 @@ impl AutoSaveState {
         }
     }
 
+    #[allow(dead_code)]
     pub fn mark_dirty(&mut self) {
         self.dirty = true;
         self.status = SaveStatus::Saving;
@@ -88,6 +90,7 @@ pub enum AppEvent {
     /// A save completed successfully.
     SaveCompleted,
     /// A save failed.
+    #[allow(dead_code)]
     SaveFailed(String),
 }
 

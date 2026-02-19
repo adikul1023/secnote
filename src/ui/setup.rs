@@ -47,6 +47,7 @@ enum Step {
     ShowMnemonic,
     VerifyMnemonic,
     Saving,
+    #[allow(dead_code)]
     SaveError(String),
 }
 
@@ -385,19 +386,12 @@ impl SetupWizard {
         });
 
         // Quiz inputs — displayed out of vertical_centered so TextEdit works
-        let mut all_correct = true;
         for (slot, &word_idx) in self.quiz_indices.clone().iter().enumerate() {
             ui.horizontal(|ui| {
                 ui.label(format!("Word #{:2}:", word_idx + 1));
                 let response = ui.text_edit_singleline(&mut self.quiz_inputs[slot]);
                 let _ = response;
             });
-
-            let typed = self.quiz_inputs[slot].trim().to_lowercase();
-            let expected = self.mnemonic_words[word_idx].to_lowercase();
-            if typed != expected {
-                all_correct = false;
-            }
         }
 
         ui.add_space(8.0);

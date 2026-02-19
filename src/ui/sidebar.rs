@@ -11,6 +11,7 @@ use crate::store::notes::{Note, NotesStore};
 // Size limits (VULN-D3 FIX)
 // ---------------------------------------------------------------------------
 const MAX_FOLDERS: usize = 1000;
+#[allow(dead_code)]
 const MAX_TAGS_PER_NOTE: usize = 100;
 
 // ---------------------------------------------------------------------------
@@ -246,6 +247,6 @@ pub fn show(
 fn folder_display_name(path: &str) -> String {
     // For nested paths like "Work/Projects", show indented last segment
     let depth = path.matches('/').count();
-    let name = path.split('/').last().unwrap_or(path);
+    let name = path.split('/').next_back().unwrap_or(path);
     format!("{}{}", "  ".repeat(depth), name)
 }

@@ -79,6 +79,7 @@ impl NotesStore {
         self.notes.iter_mut().find(|n| n.id == id)
     }
 
+    #[allow(dead_code)]
     pub fn notes_in_folder(&self, folder: Option<&str>) -> Vec<&Note> {
         self.notes
             .iter()

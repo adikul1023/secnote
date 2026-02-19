@@ -36,9 +36,11 @@ struct UnlockedState {
     sidebar: SidebarState,
     editor: EditorState,
     show_settings: bool,
+    #[allow(dead_code)]
     settings_changed: bool,
     config: AppConfig,
     notes_path: PathBuf,
+    #[allow(dead_code)]
     config_path: PathBuf,
     settings_path: PathBuf,
 }
@@ -53,7 +55,7 @@ pub struct SecureNotesApp {
 }
 
 impl SecureNotesApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let data_dir = data_dir();
         std::fs::create_dir_all(&data_dir).ok();
 
@@ -220,7 +222,7 @@ impl eframe::App for SecureNotesApp {
 // ---------------------------------------------------------------------------
 
 impl SecureNotesApp {
-    fn finish_setup(&mut self, ctx: &egui::Context) {
+    fn finish_setup(&mut self, _ctx: &egui::Context) {
         let wizard = match &mut self.state {
             AppState::Setup(w) => w,
             _ => return,
@@ -251,7 +253,7 @@ impl SecureNotesApp {
         );
     }
 
-    fn finish_unlock(&mut self, ctx: &egui::Context) {
+    fn finish_unlock(&mut self, _ctx: &egui::Context) {
         let screen = match &mut self.state {
             AppState::Locked(s) => s,
             _ => return,
@@ -326,9 +328,7 @@ impl SecureNotesApp {
                 s.lock();
             }
 
-            let config_path = u.config_path.clone();
             let notes_path = u.notes_path.clone();
-            let settings_path = u.settings_path.clone();
             let config = u.config.clone();
             let settings = {
                 u.autosave.lock().unwrap().settings.clone()

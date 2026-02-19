@@ -15,6 +15,7 @@ use aes_gcm::aead::OsRng;
 #[derive(Debug)]
 pub enum HelloError {
     /// Windows Hello / biometrics not supported or not enrolled on this device.
+    #[allow(dead_code)]
     NotSupported,
     /// The credential was not found — first-run enrollment required.
     NotFound,

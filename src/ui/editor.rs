@@ -18,6 +18,7 @@ const MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
 // Editor state (owned by app.rs)
 // ---------------------------------------------------------------------------
 
+#[derive(Default)]
 pub struct EditorState {
     pub show_preview: bool,
     pub tag_input: String,
@@ -32,19 +33,6 @@ pub struct EditorState {
     /// Avoids unwrapping the note key on every keystroke.
     /// Zeroized together with active_body on note switch or lock.
     cached_note_key: Option<MasterKey>,
-}
-
-impl Default for EditorState {
-    fn default() -> Self {
-        Self {
-            show_preview: false,
-            tag_input: String::new(),
-            pending_link: None,
-            active_body: String::new(),
-            active_note_id: None,
-            cached_note_key: None,
-        }
-    }
 }
 
 impl Drop for EditorState {
