@@ -13,7 +13,6 @@ use std::sync::mpsc;
 
 use egui::{Align, Color32, FontId, Layout, RichText, Ui};
 use rand::Rng;
-
 use crate::auth::windows_hello::{self, HelloResult};
 use crate::crypto::keys::{
     compute_config_hmac, derive_mkek, dpapi_protect, wrap_key, MasterKey,
@@ -374,6 +373,19 @@ impl SetupWizard {
                     .small(),
             );
 
+            ui.add_space(8.0);
+
+            // Optional: download as a plaintext file (an alternative to hand-writing).
+            // The user bears responsibility for securing this file.
+            if ui
+                .button("💾  Save recovery key to file…")
+                .on_hover_text("Save the 24-word recovery key as a text file for secure offline storage")
+                .clicked()
+            {
+                let words = self.mnemonic_words.clone();
+                save_recovery_key_to_file(&words);
+            }
+
             ui.add_space(16.0);
             if ui.button("I have written my recovery key  →").clicked() {
                 self.step = Step::VerifyMnemonic;
@@ -436,5 +448,37 @@ impl SetupWizard {
         if ui.button("← Back (view mnemonic again)").clicked() {
             self.step = Step::ShowMnemonic;
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Recovery key file export (rfd native save dialog)
+// ---------------------------------------------------------------------------
+
+fn save_recovery_key_to_file(words: &[String]) {
+    use std::fmt::Write as _;
+
+    let mut content = String::new();
+    let _ = writeln!(content, "=== Secure Notes — Recovery Key ===");
+    let _ = writeln!(content, "Generated: {}", chrono::Utc::now().format("%Y-%m-%d %H:%M UTC"));
+    let _ = writeln!(content);
+    let _ = writeln!(content, "IMPORTANT: Keep this file encrypted or printed and stored offline.");
+    let _ = writeln!(content, "Anyone with these 24 words can recover your vault master key.");
+    let _ = writeln!(content);
+    for (i, word) in words.iter().enumerate() {
+        let _ = writeln!(content, "{:2}. {}", i + 1, word);
+    }
+    let _ = writeln!(content);
+    let _ = writeln!(content, "=== End of Recovery Key ===");
+
+    // Use rfd for a native save‑file dialog (no blocking UI thread on Windows)
+    let path = rfd::FileDialog::new()
+        .set_title("Save Recovery Key")
+        .set_file_name("secure-notes-recovery-key.txt")
+        .add_filter("Text file", &["txt"])
+        .save_file();
+
+    if let Some(path) = path {
+        let _ = std::fs::write(&path, content.as_bytes());
     }
 }

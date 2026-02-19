@@ -34,7 +34,8 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_title("Secure Notes")
             .with_inner_size([1000.0, 680.0])
-            .with_min_inner_size([640.0, 400.0]),
+            .with_min_inner_size([640.0, 400.0])
+            .with_transparent(true),
         ..Default::default()
     };
 
@@ -89,3 +90,46 @@ fn show_error_box(msg: &str) {
 fn show_error_box(msg: &str) {
     eprintln!("{msg}");
 }
+
+// ---------------------------------------------------------------------------
+// Windows Mica / Acrylic backdrop
+// ---------------------------------------------------------------------------
+
+/// Attempt to enable Mica (Windows 11) or Acrylic (Windows 10) backdrop on a
+/// window found by its title. Call once after the window is created.
+/// Silently no-ops on failure (older Windows, Wine, etc.).
+#[cfg(target_os = "windows")]
+pub fn try_enable_mica(window_title: &str) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_SYSTEMBACKDROP_TYPE,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::FindWindowW;
+
+    let title: Vec<u16> = window_title
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let hwnd: HWND = unsafe {
+        FindWindowW(windows::core::PCWSTR::null(), windows::core::PCWSTR(title.as_ptr())).unwrap_or_default()
+    };
+
+    if hwnd.0.is_null() {
+        return;
+    }
+
+    // DWMSBT_MAINWINDOW = 2 (Mica), DWMSBT_TRANSIENTWINDOW = 3 (Acrylic)
+    let backdrop_type: u32 = 2; // Mica
+    unsafe {
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_SYSTEMBACKDROP_TYPE,
+            &backdrop_type as *const u32 as *const std::ffi::c_void,
+            std::mem::size_of::<u32>() as u32,
+        );
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn try_enable_mica(_window_title: &str) {}

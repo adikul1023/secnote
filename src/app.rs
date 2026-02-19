@@ -3,18 +3,21 @@
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
 
-use eframe::egui::{self, FontId, RichText};
-
+use eframe::egui::{self, FontId, Key, Modifiers, RichText};
 use crate::crypto::keys::MasterKey;
 use crate::crypto::vault::{encrypt_note_body, encrypt_store, unwrap_note_key};
 use crate::save::autosave::{start_autosave_thread, AppEvent, AutoSaveState};
 use crate::store::notes::{AppConfig, AppSettings, NotesStore};
 use crate::ui::{
+    command_palette::{CommandPalette, PaletteAction},
     editor::{self, EditorState},
     lock_screen::LockScreen,
     setup::SetupWizard,
     sidebar::{self, SidebarState},
-    settings,
+    settings::{self, SettingsTab},
+    status_bar,
+    tabs::TabBar,
+    theme,
 };
 
 // ---------------------------------------------------------------------------
@@ -22,12 +25,9 @@ use crate::ui::{
 // ---------------------------------------------------------------------------
 
 enum AppState {
-    /// First run — setup wizard not yet complete.
     Setup(SetupWizard),
-    /// Vault locked.
     Locked(LockScreen),
-    /// Vault unlocked.
-    Unlocked(UnlockedState),
+    Unlocked(Box<UnlockedState>),
 }
 
 struct UnlockedState {
@@ -36,6 +36,7 @@ struct UnlockedState {
     sidebar: SidebarState,
     editor: EditorState,
     show_settings: bool,
+    settings_tab: SettingsTab,
     #[allow(dead_code)]
     settings_changed: bool,
     config: AppConfig,
@@ -43,6 +44,11 @@ struct UnlockedState {
     #[allow(dead_code)]
     config_path: PathBuf,
     settings_path: PathBuf,
+    // New UI components
+    command_palette: CommandPalette,
+    tab_bar: TabBar,
+    #[allow(dead_code)]
+    last_theme: crate::store::notes::ThemeName,
 }
 
 // ---------------------------------------------------------------------------
@@ -95,8 +101,18 @@ impl SecureNotesApp {
 
 impl eframe::App for SecureNotesApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Apply a clean dark theme
-        ctx.set_visuals(egui::Visuals::dark());
+        // Apply theme
+        if let AppState::Unlocked(ref u) = self.state {
+            let settings = u.autosave.lock().unwrap().settings.clone();
+            theme::apply_theme_with_font(
+                ctx,
+                settings.theme,
+                settings.font_size,
+                matches!(settings.font_family, crate::store::notes::FontFamily::Monospace),
+            );
+        } else {
+            ctx.set_visuals(egui::Visuals::dark());
+        }
 
         // Handle focus-loss lock for Unlocked state
         if let AppState::Unlocked(ref mut u) = self.state {
@@ -122,6 +138,177 @@ impl eframe::App for SecureNotesApp {
         }
 
         // -----------------------------------------------------------------------
+        // Global keyboard shortcuts (Unlocked only)
+        // -----------------------------------------------------------------------
+        if let AppState::Unlocked(ref mut u) = self.state {
+            let (ctrl_p, ctrl_n, ctrl_w, ctrl_comma, ctrl_l, esc) = ctx.input(|i| {
+                let ctrl = i.modifiers.matches_logically(Modifiers::CTRL);
+                (
+                    ctrl && i.key_pressed(Key::P),
+                    ctrl && i.key_pressed(Key::N),
+                    ctrl && i.key_pressed(Key::W),
+                    ctrl && i.key_pressed(Key::Comma),
+                    ctrl && i.key_pressed(Key::L),
+                    i.key_pressed(Key::Escape),
+                )
+            });
+
+            if ctrl_p {
+                u.command_palette.open();
+            }
+            if ctrl_comma {
+                u.show_settings = !u.show_settings;
+            }
+            if ctrl_l {
+                self.do_lock(ctx);
+                return;
+            }
+            if esc && u.command_palette.visible {
+                u.command_palette.close();
+            }
+            if ctrl_n {
+                // Create a new note via sidebar logic
+                let mut guard = u.autosave.lock().unwrap();
+                let s = &mut *guard;
+                if let Some(mk) = s.master_key.as_ref() {
+                    let mut note = crate::store::notes::Note::new(u.sidebar.active_folder.clone());
+                    let aad = note.id.as_bytes().to_vec();
+                    let (nk, wrapped) = crate::crypto::vault::new_note_key(mk, &aad);
+                    note.note_key_wrapped = wrapped;
+                    note.body_enc = crate::crypto::vault::encrypt_note_body(&nk, "", &aad).unwrap_or_default();
+                    let id = note.id;
+                    s.store.add_note(note);
+                    u.sidebar.selected_note = Some(id);
+                    u.tab_bar.push(id);
+                    s.dirty = true;
+                }
+            }
+            if ctrl_w {
+                // Close active tab
+                if let Some(id) = u.sidebar.selected_note {
+                    u.tab_bar.remove(id);
+                    u.sidebar.selected_note = u.tab_bar.recents.front().copied();
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------------
+        // Command palette (rendered before any panel so it's on top)
+        // -----------------------------------------------------------------------
+        if let AppState::Unlocked(ref mut u) = self.state {
+            let current_theme = u.autosave.lock().unwrap().settings.theme;
+            let store_snap = u.autosave.lock().unwrap().store.notes.iter()
+                .map(|n| (n.id, n.title.clone(), n.folder.clone()))
+                .collect::<Vec<_>>();
+            // Build a temporary NotesStore view for palette
+            let mut palette_store = crate::store::notes::NotesStore::default();
+            for (id, title, folder) in store_snap {
+                let mut n = crate::store::notes::Note::new(folder);
+                n.id = id;
+                n.title = title;
+                palette_store.notes.push(n);
+            }
+
+            if let Some(action) = u.command_palette.show(ctx, &palette_store, current_theme) {
+                match action {
+                    PaletteAction::OpenNote(id) => {
+                        u.sidebar.selected_note = Some(id);
+                        u.tab_bar.push(id);
+                    }
+                    PaletteAction::NewNote => {
+                        let mut guard = u.autosave.lock().unwrap();
+                        let s = &mut *guard;
+                        if let Some(mk) = s.master_key.as_ref() {
+                            let mut note = crate::store::notes::Note::new(u.sidebar.active_folder.clone());
+                            let aad = note.id.as_bytes().to_vec();
+                            let (nk, wrapped) = crate::crypto::vault::new_note_key(mk, &aad);
+                            note.note_key_wrapped = wrapped;
+                            note.body_enc = crate::crypto::vault::encrypt_note_body(&nk, "", &aad).unwrap_or_default();
+                            let id = note.id;
+                            s.store.add_note(note);
+                            u.sidebar.selected_note = Some(id);
+                            u.tab_bar.push(id);
+                            s.dirty = true;
+                        }
+                    }
+                    PaletteAction::Lock => {
+                        self.do_lock(ctx);
+                        return;
+                    }
+                    PaletteAction::OpenSettings => {
+                        if let AppState::Unlocked(ref mut u2) = self.state {
+                            u2.show_settings = true;
+                        }
+                    }
+                    PaletteAction::Dismiss => {}
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------------
+        // Status bar (bottom panel — before CentralPanel)
+        // -----------------------------------------------------------------------
+        if let AppState::Unlocked(ref u) = self.state {
+            let settings = u.autosave.lock().unwrap().settings.clone();
+            if settings.show_status_bar {
+                let selected = u.sidebar.selected_note;
+                let (note_title, folder_path) = {
+                    let guard = u.autosave.lock().unwrap();
+                    selected
+                        .and_then(|id| guard.store.notes.iter().find(|n| n.id == id))
+                        .map(|n| (n.title.clone(), n.folder.clone()))
+                        .unwrap_or_default()
+                };
+                let word_count = u.editor.active_body.split_whitespace().count();
+                let char_count = u.editor.active_body.chars().count();
+                let idle_secs = crate::save::autosave::system_idle_ms() / 1000;
+                let vim_is_normal = u.editor.vim_normal;
+                status_bar::show(
+                    ctx,
+                    &note_title,
+                    folder_path.as_deref(),
+                    word_count,
+                    char_count,
+                    "",
+                    idle_secs,
+                    settings.idle_lock_minutes,
+                    settings.vim_mode,
+                    vim_is_normal,
+                    settings.theme,
+                );
+            }
+        }
+
+        // -----------------------------------------------------------------------
+        // Tab bar (top panel, shown inside unlocked + below top bar)
+        // -----------------------------------------------------------------------
+        if let AppState::Unlocked(ref mut u) = self.state {
+            let current_theme = u.autosave.lock().unwrap().settings.theme;
+            let selected = u.sidebar.selected_note;
+            let store_snap: crate::store::notes::NotesStore = {
+                let g = u.autosave.lock().unwrap();
+                g.store.clone()
+            };
+            let tab_resp = u.tab_bar.show(ctx, &store_snap, selected, current_theme);
+            if let Some(id) = tab_resp.activated {
+                u.sidebar.selected_note = Some(id);
+            }
+            if let Some(id) = tab_resp.closed {
+                u.tab_bar.remove(id);
+                if u.sidebar.selected_note == Some(id) {
+                    u.sidebar.selected_note = u.tab_bar.recents.front().copied();
+                }
+            }
+
+            // Push newly selected note to tab bar
+            if let Some(id) = selected {
+                if u.tab_bar.recents.front() != Some(&id) {
+                    u.tab_bar.push(id);
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------------
         // Top menu bar
         // -----------------------------------------------------------------------
         egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
@@ -142,6 +329,9 @@ impl eframe::App for SecureNotesApp {
                             if ui.button("⚙ Settings").clicked() {
                                 u.show_settings = !u.show_settings;
                             }
+                            if ui.button("⌘ Palette (Ctrl+P)").on_hover_text("Open command palette").clicked() {
+                                u.command_palette.open();
+                            }
                         }
                     }
                 });
@@ -152,7 +342,6 @@ impl eframe::App for SecureNotesApp {
         // Central panel — route by state
         // -----------------------------------------------------------------------
         egui::CentralPanel::default().show(ctx, |ui| {
-            // Borrow self.state directly
             match &mut self.state {
                 AppState::Setup(wizard) => {
                     wizard.show(ui);
@@ -170,7 +359,7 @@ impl eframe::App for SecureNotesApp {
                     if u.show_settings {
                         let mut changed = false;
                         let mut new_settings = u.autosave.lock().unwrap().settings.clone();
-                        let go_back = settings::show(ui, &mut new_settings, &mut changed);
+                        let go_back = settings::show(ui, &mut new_settings, &mut changed, &mut u.settings_tab);
                         if go_back {
                             u.show_settings = false;
                         }
@@ -180,15 +369,28 @@ impl eframe::App for SecureNotesApp {
                             save_settings(&settings_path, &new_settings);
                         }
                     } else {
+                        let settings = u.autosave.lock().unwrap().settings.clone();
+                        let sidebar_w = settings.sidebar_width;
+                        let current_theme = settings.theme;
+
                         // Main layout: sidebar (left) + editor (right)
                         egui::SidePanel::left("sidebar")
-                            .min_width(180.0)
-                            .max_width(280.0)
+                            .min_width(sidebar_w)
+                            .max_width(400.0)
+                            .default_width(sidebar_w)
                             .show_inside(ui, |ui| {
                                 let mut guard = u.autosave.lock().unwrap();
                                 let s = &mut *guard;
                                 let mk = s.master_key.as_ref().expect("mk present while unlocked");
-                                sidebar::show(ui, &mut s.store, &mut u.sidebar, &mut s.dirty, mk);
+                                sidebar::show(
+                                    ui,
+                                    &mut s.store,
+                                    &mut u.sidebar,
+                                    &mut s.dirty,
+                                    mk,
+                                    current_theme,
+                                    sidebar_w,
+                                );
                             });
 
                         egui::CentralPanel::default().show_inside(ui, |ui| {
@@ -205,6 +407,7 @@ impl eframe::App for SecureNotesApp {
                                 &mut s.dirty,
                                 save_status,
                                 mk,
+                                &settings,
                             );
                         });
                     }
@@ -357,23 +560,28 @@ fn build_unlocked_state(
     settings_path: PathBuf,
 ) -> AppState {
     let (event_tx, event_rx) = mpsc::channel();
+    let initial_theme = settings.theme;
     let autosave_state = AutoSaveState::new(store, master_key, notes_path.clone(), settings);
     let autosave = Arc::new(Mutex::new(autosave_state));
 
     start_autosave_thread(autosave.clone(), event_tx);
 
-    AppState::Unlocked(UnlockedState {
+    AppState::Unlocked(Box::new(UnlockedState {
         autosave,
         event_rx,
         sidebar: SidebarState::default(),
         editor: EditorState::default(),
         show_settings: false,
+        settings_tab: SettingsTab::default(),
         settings_changed: false,
         config,
         notes_path,
         config_path,
         settings_path,
-    })
+        command_palette: CommandPalette::default(),
+        tab_bar: TabBar::default(),
+        last_theme: initial_theme,
+    }))
 }
 
 fn data_dir() -> PathBuf {

@@ -14,6 +14,12 @@ egui = "0.29"
 eframe = { version = "0.29", features = ["wgpu"] }
 egui_commonmark = "0.18"
 
+# Native file dialogs (backup key export)
+rfd = "0.15"
+
+# Fuzzy search (command palette)
+fuzzy-matcher = "0.3"
+
 # Cryptography
 aes-gcm = { version = "0.10", features = ["aes", "zeroize"] }
 hkdf = "0.12"
@@ -56,4 +62,5 @@ features = [
     "Win32_System_Memory",
     "Win32_System_SystemInformation",
     "Storage_Streams",
+    "Win32_Graphics_Dwm",
 ]

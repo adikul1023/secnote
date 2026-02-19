@@ -142,6 +142,58 @@ pub struct AppConfig {
 }
 
 // ---------------------------------------------------------------------------
+// ThemeName / FontFamily enums
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ThemeName {
+    #[default]
+    TokyoNight,
+    CatppuccinMocha,
+    Gruvbox,
+    Nord,
+    OneDark,
+}
+
+impl ThemeName {
+    pub fn label(self) -> &'static str {
+        match self {
+            ThemeName::TokyoNight => "Tokyo Night",
+            ThemeName::CatppuccinMocha => "Catppuccin Mocha",
+            ThemeName::Gruvbox => "Gruvbox",
+            ThemeName::Nord => "Nord",
+            ThemeName::OneDark => "One Dark",
+        }
+    }
+
+    pub fn all() -> &'static [ThemeName] {
+        &[
+            ThemeName::TokyoNight,
+            ThemeName::CatppuccinMocha,
+            ThemeName::Gruvbox,
+            ThemeName::Nord,
+            ThemeName::OneDark,
+        ]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum FontFamily {
+    #[default]
+    Monospace,
+    Proportional,
+}
+
+impl FontFamily {
+    pub fn label(self) -> &'static str {
+        match self {
+            FontFamily::Monospace => "Monospace",
+            FontFamily::Proportional => "Proportional",
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // AppSettings — persisted to settings.json (plaintext, not sensitive)
 // ---------------------------------------------------------------------------
 
@@ -151,13 +203,41 @@ pub struct AppSettings {
     pub idle_lock_minutes: u32,
     /// Lock when the application window loses focus.
     pub lock_on_focus_loss: bool,
+    /// UI color theme.
+    #[serde(default)]
+    pub theme: ThemeName,
+    /// Editor font size in points.
+    #[serde(default = "default_font_size")]
+    pub font_size: f32,
+    /// Editor font family.
+    #[serde(default)]
+    pub font_family: FontFamily,
+    /// Enable vim-style keybindings in the editor.
+    #[serde(default)]
+    pub vim_mode: bool,
+    /// Show the status bar at the bottom of the window.
+    #[serde(default = "default_true")]
+    pub show_status_bar: bool,
+    /// Width of the sidebar in pixels.
+    #[serde(default = "default_sidebar_width")]
+    pub sidebar_width: f32,
 }
+
+fn default_font_size() -> f32 { 14.0 }
+fn default_true() -> bool { true }
+fn default_sidebar_width() -> f32 { 220.0 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
             idle_lock_minutes: 5,
             lock_on_focus_loss: false,
+            theme: ThemeName::default(),
+            font_size: default_font_size(),
+            font_family: FontFamily::default(),
+            vim_mode: false,
+            show_status_bar: true,
+            sidebar_width: default_sidebar_width(),
         }
     }
 }

@@ -3,3 +3,7 @@ pub mod lock_screen;
 pub mod sidebar;
 pub mod editor;
 pub mod settings;
+pub mod theme;
+pub mod command_palette;
+pub mod status_bar;
+pub mod tabs;

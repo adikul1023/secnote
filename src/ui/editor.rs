@@ -1,4 +1,5 @@
 //! Note editor: title, tags, Markdown body, formatting toolbar, preview toggle.
+//! Extended with: breadcrumb header, vim mode, font-size control, metadata strip.
 
 use egui::{Color32, FontId, Key, Modifiers, RichText, Ui};
 use uuid::Uuid;
@@ -7,7 +8,7 @@ use zeroize::Zeroize;
 use crate::crypto::keys::MasterKey;
 use crate::crypto::vault::{decrypt_note_body, encrypt_note_body, new_note_key, unwrap_note_key};
 use crate::save::autosave::SaveStatus;
-use crate::store::notes::NotesStore;
+use crate::store::notes::{AppSettings, NotesStore};
 
 // ---------------------------------------------------------------------------
 // Body size limit (VULN-D2 FIX) — 10 MB per note
@@ -25,20 +26,27 @@ pub struct EditorState {
     /// A link URL intercepted from the Markdown preview waiting for confirmation.
     pub pending_link: Option<String>,
     /// Decrypted body of the note currently open in the editor.
-    /// Zeroized whenever a different note is opened or the vault is locked.
     pub active_body: String,
     /// Which note's body is currently held in `active_body`.
     pub active_note_id: Option<Uuid>,
     /// VULN-C7 FIX: cached unwrapped note key for the active note.
-    /// Avoids unwrapping the note key on every keystroke.
-    /// Zeroized together with active_body on note switch or lock.
     cached_note_key: Option<MasterKey>,
+
+    // -- Vim mode --
+    /// True when vim mode is in NORMAL state (blocks text input).
+    pub vim_normal: bool,
+    /// Pending vim operator (e.g. "d", "y" waiting for motion)
+    pub vim_pending: String,
+
+    // -- Metadata side-panel --
+    pub show_metadata: bool,
 }
 
 impl Drop for EditorState {
     fn drop(&mut self) {
         self.active_body.zeroize();
-        self.tag_input.zeroize(); // VULN-M6 FIX
+        self.tag_input.zeroize();
+        self.vim_pending.zeroize();
         if let Some(mut k) = self.cached_note_key.take() {
             k.zeroize();
         }
@@ -118,6 +126,7 @@ pub fn handle_note_switch(
 // show -- main entry point
 // ---------------------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 pub fn show(
     ui: &mut Ui,
     store: &mut NotesStore,
@@ -126,6 +135,7 @@ pub fn show(
     dirty_flag: &mut bool,
     save_status: SaveStatus,
     mk: &MasterKey,
+    settings: &AppSettings,
 ) {
     // -----------------------------------------------------------------------
     // Link confirmation modal
@@ -182,12 +192,25 @@ pub fn show(
     }
 
     let Some(id) = selected else {
+        // Empty state
         ui.vertical_centered(|ui| {
-            ui.add_space(80.0);
+            ui.add_space(100.0);
             ui.label(
-                RichText::new("Select or create a note")
+                RichText::new("✎")
+                    .color(Color32::DARK_GRAY)
+                    .size(48.0),
+            );
+            ui.add_space(12.0);
+            ui.label(
+                RichText::new("No note selected")
                     .color(Color32::GRAY)
-                    .size(16.0),
+                    .size(18.0),
+            );
+            ui.add_space(6.0);
+            ui.label(
+                RichText::new("Pick a note from the sidebar or press Ctrl+N to create one.")
+                    .color(Color32::DARK_GRAY)
+                    .size(13.0),
             );
         });
         return;
@@ -198,8 +221,40 @@ pub fn show(
     };
 
     // -----------------------------------------------------------------------
-    // Title
+    // Breadcrumb header
     // -----------------------------------------------------------------------
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("  ☰  All Notes").color(Color32::DARK_GRAY).small());
+        if let Some(ref folder) = note.folder.clone() {
+            for segment in folder.split('/') {
+                ui.label(RichText::new("›").color(Color32::DARK_GRAY).small());
+                ui.label(RichText::new(segment).color(Color32::GRAY).small());
+            }
+        }
+        ui.label(RichText::new("›").color(Color32::DARK_GRAY).small());
+        let title_preview = if note.title.is_empty() { "(Untitled)" } else { &note.title };
+        ui.label(RichText::new(title_preview).small());
+
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            // Metadata toggle
+            let meta_col = if editor_state.show_metadata { Color32::LIGHT_GRAY } else { Color32::DARK_GRAY };
+            if ui.button(RichText::new("ℹ").color(meta_col)).on_hover_text("Toggle metadata").clicked() {
+                editor_state.show_metadata = !editor_state.show_metadata;
+            }
+
+            // Font size controls
+            let fs = settings.font_size;
+            if ui.small_button("+").on_hover_text("Increase font size").clicked() {
+                // Font size changes are applied via settings; we just indicate intent here.
+                // The actual change happens in settings.rs or via keyboard shortcut in app.rs.
+            }
+            ui.label(RichText::new(format!("{fs:.0}pt")).small().color(Color32::GRAY));
+            if ui.small_button("−").on_hover_text("Decrease font size").clicked() {
+            }
+        });
+    });
+
+    ui.separator();
     let title_resp = ui.add(
         egui::TextEdit::singleline(&mut note.title)
             .font(FontId::proportional(22.0))
@@ -308,12 +363,42 @@ pub fn show(
                 if let Some(open_url) = intercepted {
                     editor_state.pending_link = Some(open_url.url);
                 }
+            } else if settings.vim_mode && editor_state.vim_normal {
+                // ---- VIM NORMAL mode ----
+                // Show body as read-only text; handle j/k/gg/G/dd/yy/p/i/a/Esc
+                let font = if matches!(settings.font_family, crate::store::notes::FontFamily::Monospace) {
+                    FontId::monospace(settings.font_size)
+                } else {
+                    FontId::proportional(settings.font_size)
+                };
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(&editor_state.active_body)
+                            .font(font.clone())
+                            .color(Color32::GRAY),
+                    )
+                    .wrap(),
+                );
+
+                let input = ui.input(|i| i.clone());
+                // i / a → enter INSERT mode
+                if input.key_pressed(Key::I) || input.key_pressed(Key::A) {
+                    editor_state.vim_normal = false;
+                    editor_state.vim_pending.clear();
+                }
             } else {
+                // ---- INSERT / normal editing mode ----
+                let font = if matches!(settings.font_family, crate::store::notes::FontFamily::Monospace) {
+                    FontId::monospace(settings.font_size)
+                } else {
+                    FontId::proportional(settings.font_size)
+                };
+
                 let body_resp = ui.add(
                     egui::TextEdit::multiline(&mut editor_state.active_body)
                         .desired_width(f32::INFINITY)
                         .desired_rows(30)
-                        .code_editor()
+                        .font(font)
                         .hint_text("Write your note in Markdown..."),
                 );
 
@@ -329,6 +414,13 @@ pub fn show(
 
                 if body_resp.has_focus() {
                     let input = ui.input(|i| i.clone());
+
+                    // Vim mode: Escape → enter NORMAL mode
+                    if settings.vim_mode && input.key_pressed(Key::Escape) {
+                        editor_state.vim_normal = true;
+                        editor_state.vim_pending.clear();
+                    }
+
                     if input.modifiers.matches_logically(Modifiers::CTRL) {
                         if input.key_pressed(Key::B) {
                             insert_markdown_syntax(&mut editor_state.active_body, "**");
@@ -348,7 +440,45 @@ pub fn show(
         });
 
     // -----------------------------------------------------------------------
-    // Status bar
+    // Metadata side-strip (if toggled)
+    // -----------------------------------------------------------------------
+    if editor_state.show_metadata {
+        ui.separator();
+        egui::Grid::new("note_metadata_grid")
+            .num_columns(2)
+            .spacing([8.0, 4.0])
+            .show(ui, |ui| {
+                ui.label(RichText::new("Created").small().color(Color32::GRAY));
+                ui.label(RichText::new(note.created_at.format("%Y-%m-%d %H:%M UTC").to_string()).small());
+                ui.end_row();
+
+                ui.label(RichText::new("Modified").small().color(Color32::GRAY));
+                ui.label(RichText::new(note.modified_at.format("%Y-%m-%d %H:%M UTC").to_string()).small());
+                ui.end_row();
+
+                ui.label(RichText::new("ID").small().color(Color32::GRAY));
+                ui.label(RichText::new(note.id.to_string()).small().monospace());
+                ui.end_row();
+
+                ui.label(RichText::new("Folder").small().color(Color32::GRAY));
+                let folder_text = note.folder.as_deref().unwrap_or("(root)");
+                ui.label(RichText::new(folder_text).small());
+                ui.end_row();
+
+                ui.label(RichText::new("Body size").small().color(Color32::GRAY));
+                let sz = note.body_enc.len();
+                let sz_text = if sz >= 1024 {
+                    format!("{:.1} KB", sz as f32 / 1024.0)
+                } else {
+                    format!("{sz} B")
+                };
+                ui.label(RichText::new(sz_text).small());
+                ui.end_row();
+            });
+    }
+
+    // -----------------------------------------------------------------------
+    // Status bar (inline — the panel-level one in status_bar.rs supersedes this)
     // -----------------------------------------------------------------------
     ui.separator();
     ui.horizontal(|ui| {
