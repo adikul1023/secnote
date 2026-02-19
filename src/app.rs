@@ -235,10 +235,12 @@ impl SecureNotesApp {
 
         // Write config.json
         save_config(&config_path, &complete.config);
-        // Write initial empty notes.enc
+        // Write initial empty notes.enc (R6 FIX: use atomic write with reparse-point check)
         let initial_enc =
             encrypt_store(&complete.master_key, &complete.store).expect("initial encrypt");
-        std::fs::write(&notes_path, &initial_enc).expect("write notes.enc");
+        let dir = notes_path.parent().unwrap_or_else(|| std::path::Path::new("."));
+        crate::save::autosave::atomic_write_pub(dir, &notes_path, &initial_enc)
+            .expect("write initial notes.enc");
         // Write settings.json
         save_settings(&settings_path, &complete.settings);
 
@@ -283,16 +285,15 @@ impl SecureNotesApp {
         if let AppState::Unlocked(ref mut u) = self.state {
             // Flush active editor body back into its note before locking.
             {
-                let mk_bytes_opt = {
+                let mut mk_bytes_opt = {
                     let s = u.autosave.lock().unwrap();
                     s.master_key.as_ref().map(|m| *m.as_bytes())
                 };
-                if let (Some(mk_bytes), Some(note_id)) = (mk_bytes_opt, u.editor.active_note_id) {
+                if let (Some(mut mk_bytes), Some(note_id)) = (mk_bytes_opt, u.editor.active_note_id) {
                     let mut s = u.autosave.lock().unwrap();
                     if let Some(note) = s.store.get_mut(note_id) {
                         if !note.note_key_wrapped.is_empty() {
-                            let mut mk_bytes_mut = mk_bytes;
-                            let tmp_mk = MasterKey::new(&mut mk_bytes_mut); // VULN-M1: zeroizes mk_bytes_mut
+                            let tmp_mk = MasterKey::new(&mut mk_bytes); // R1 FIX: zeroizes mk_bytes directly
                             let note_aad = note.id.as_bytes().to_vec();
                             if let Ok(nk) = unwrap_note_key(&tmp_mk, &note.note_key_wrapped, &note_aad) {
                                 if let Ok(enc) = encrypt_note_body(&nk, &u.editor.active_body, &note_aad) {
@@ -302,8 +303,10 @@ impl SecureNotesApp {
                             }
                         }
                     }
+                    mk_bytes.zeroize(); // R1 FIX: zeroize on all paths (no-op if MasterKey::new already did)
                 }
                 use zeroize::Zeroize;
+                mk_bytes_opt.zeroize(); // R1 FIX: zeroize the Option copy left behind by if-let on Copy type
                 u.editor.active_body.zeroize();
                 u.editor.active_note_id = None;
             }

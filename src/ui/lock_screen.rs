@@ -275,7 +275,7 @@ impl LockScreen {
         // Windows Hello verified the user identity above (the prompt was the gate).
         // Now use DPAPI to recover the MKEK — it is user+machine scoped and
         // cannot be decrypted offline or by any other Windows account.
-        let mkek_vec = match dpapi_unprotect(&self.config.winhello_dpapi_blob) {
+        let mut mkek_vec = match dpapi_unprotect(&self.config.winhello_dpapi_blob) {
             Ok(b) => b,
             Err(e) => {
                 self.state = State::Error(format!("Could not recover key: {e}"));
@@ -283,11 +283,13 @@ impl LockScreen {
             }
         };
         if mkek_vec.len() != 32 {
+            mkek_vec.zeroize(); // R2 FIX: zeroize DPAPI output before early return
             self.state = State::Error("Stored MKEK has unexpected length".into());
             return;
         }
         let mut mkek_bytes = [0u8; 32];
         mkek_bytes.copy_from_slice(&mkek_vec);
+        mkek_vec.zeroize(); // R2 FIX: zeroize heap copy of MKEK immediately
         let mkek = MasterKey::new(&mut mkek_bytes); // mkek_bytes zeroized inside new()
 
         // Unwrap the master key (VULN-C1: use winhello AAD)
@@ -354,15 +356,14 @@ impl LockScreen {
         let recovery_mkek_bytes_result = derive_mkek(&entropy, &self.config.recovery_salt);
         entropy.zeroize(); // VULN-M3 FIX: zeroize entropy immediately after use
 
-        let recovery_mkek_bytes = match recovery_mkek_bytes_result {
+        let mut recovery_mkek_bytes = match recovery_mkek_bytes_result {
             Ok(b) => b,
             Err(e) => {
                 self.record_recovery_failure(e.to_string());
                 return;
             }
         };
-        let mut rb = recovery_mkek_bytes;
-        let recovery_mkek = MasterKey::new(&mut rb); // rb zeroized inside
+        let recovery_mkek = MasterKey::new(&mut recovery_mkek_bytes); // R3 FIX: zeroize in-place, no redundant copy
 
         // Unwrap master key via recovery path (VULN-C1: use recovery AAD)
         let mk = match unwrap_key(&recovery_mkek, &self.config.recovery_wrapped_mk, AAD_RECOVERY_MK) {

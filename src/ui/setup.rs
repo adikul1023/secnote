@@ -186,6 +186,7 @@ impl SetupWizard {
     fn generate_master_key_and_mnemonic(&mut self) {
         use aes_gcm::aead::OsRng;
         use rand::RngCore;
+        use zeroize::Zeroize;
 
         // Generate 32-byte master key
         let mk = MasterKey::generate();
@@ -210,6 +211,7 @@ impl SetupWizard {
         // bip39 crate: Mnemonic::from_entropy gives us 24 words
         let mnemonic = bip39::Mnemonic::from_entropy(&entropy)
             .expect("32-byte entropy must produce valid mnemonic");
+        entropy.zeroize(); // R4 FIX: zeroize stack copy of recovery entropy
         self.mnemonic_words = mnemonic
             .words()
             .map(|w| w.to_string())
@@ -248,8 +250,15 @@ impl SetupWizard {
         // VULN-C1: bind recovery-wrapped MK to recovery role
         let recovery_wrapped_mk = wrap_key(&recovery_mkek, mk.as_bytes(), AAD_RECOVERY_MK);
 
-        // Zeroize mnemonic entropy from memory
+        // Zeroize mnemonic entropy and words from memory
         self.mnemonic_raw.zeroize();
+        for word in &mut self.mnemonic_words {
+            word.zeroize();
+        }
+        self.mnemonic_words.clear();
+        for input in &mut self.quiz_inputs {
+            input.zeroize();
+        }
 
         // Build config (config_hmac computed below)
         let mut config = AppConfig {
