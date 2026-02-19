@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── Security audit ─────────────────────────────────────────────────────────
+  audit:
+    name: Security audit (cargo audit)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: secure-notes
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Run cargo audit
+        run: cargo audit
+
+  # ── Dependency policy ──────────────────────────────────────────────────────
+  deny:
+    name: Dependency policy (cargo deny)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: secure-notes
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+      - name: Run cargo deny
+        run: cargo deny check
+
+  # ── Lint ───────────────────────────────────────────────────────────────────
+  clippy:
+    name: Lint (cargo clippy)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: secure-notes
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Run cargo clippy
+        # -D warnings turns every warning into a hard error.
+        # This catches: accidental Clone derives on sensitive types,
+        # dead_code, unused imports, etc.
+        run: cargo clippy -- -D warnings
+
+  # ── Tests ──────────────────────────────────────────────────────────────────
+  test:
+    name: Tests (cargo test)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: secure-notes
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run cargo test
+        run: cargo test
