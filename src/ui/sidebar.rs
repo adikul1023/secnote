@@ -396,10 +396,12 @@ fn render_folder_subtree(
                     .desired_width(sidebar_width - (depth + 1) as f32 * 12.0 - 30.0),
             );
             r.request_focus();
-            if r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+            let pressed_enter = ui.input(|i| i.key_pressed(Key::Enter));
+            let pressed_escape = ui.input(|i| i.key_pressed(Key::Escape));
+            if pressed_enter || (r.lost_focus() && !pressed_escape) {
                 *folder_renamed = Some((node.path.clone(), state.folder_rename_buffer.trim().to_string()));
             }
-            if ui.input(|i| i.key_pressed(Key::Escape)) { state.renaming_folder = None; }
+            if pressed_escape { state.renaming_folder = None; }
         });
         return;
     }
@@ -478,10 +480,12 @@ fn render_note_row(
                 egui::TextEdit::singleline(&mut state.rename_buffer).desired_width(140.0),
             );
             r.request_focus();
-            if r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+            let pressed_enter  = ui.input(|i| i.key_pressed(Key::Enter));
+            let pressed_escape = ui.input(|i| i.key_pressed(Key::Escape));
+            if pressed_enter || (r.lost_focus() && !pressed_escape) {
                 *note_rename_done = Some((id, state.rename_buffer.clone()));
             }
-            if ui.input(|i| i.key_pressed(Key::Escape)) { state.renaming_note = None; }
+            if pressed_escape { state.renaming_note = None; }
         });
         return;
     }
