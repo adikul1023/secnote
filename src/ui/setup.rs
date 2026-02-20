@@ -11,7 +11,7 @@
 
 use std::sync::mpsc;
 
-use egui::{Align, Color32, FontId, Layout, RichText, Ui};
+use egui::{Color32, FontId, RichText, Ui};
 use rand::Rng;
 use crate::auth::windows_hello::{self, HelloResult};
 use crate::crypto::keys::{
@@ -422,10 +422,9 @@ impl SetupWizard {
             ui.add_space(4.0);
         }
 
-        ui.with_layout(Layout::bottom_up(Align::Center), |ui| {
-            ui.add_space(16.0);
-        });
+        ui.add_space(16.0);
 
+        ui.vertical_centered(|ui| {
         if ui.button("Confirm & Finish Setup").clicked() {
             // Verify all three inputs
             let mut ok = true;
@@ -448,6 +447,7 @@ impl SetupWizard {
         if ui.button("← Back (view mnemonic again)").clicked() {
             self.step = Step::ShowMnemonic;
         }
+        });
     }
 }
 
