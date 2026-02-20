@@ -98,13 +98,12 @@ pub fn apply_theme(ctx: &Context, theme: ThemeName) {
     visuals.window_shadow                          = egui::Shadow::NONE;
     visuals.popup_shadow                           = egui::Shadow::NONE;
 
-    // Text
-    visuals.override_text_color                    = Some(p.text);
-
-    // Widgets — no borders, rounded, subtle tones
+    // Text: set via fg_stroke.color (not override_text_color) so hyperlinks
+    // can use their own hyperlink_color without being clobbered.
+    // (override_text_color would override ALL text including links.)
     visuals.widgets.noninteractive.bg_fill         = Color32::TRANSPARENT;
     visuals.widgets.noninteractive.weak_bg_fill    = Color32::TRANSPARENT;
-    visuals.widgets.noninteractive.fg_stroke       = Stroke::new(0.0, Color32::TRANSPARENT);
+    visuals.widgets.noninteractive.fg_stroke       = Stroke::new(0.0, p.text); // width=0 → no border; color → text
     visuals.widgets.noninteractive.bg_stroke       = Stroke::NONE;
     visuals.widgets.noninteractive.rounding        = Rounding::same(3.0);
 

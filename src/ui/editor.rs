@@ -331,10 +331,8 @@ pub fn show(
         .auto_shrink([false; 2])
         .show(ui, |ui| {
             if editor_state.show_preview {
-                // Clear override_text_color so hyperlink_color is actually used
-                // (apply_theme sets override_text_color which overrides *all* text
-                //  including links, making them indistinguishable from body text)
-                ui.visuals_mut().override_text_color = None;
+                // hyperlink_color is now respected automatically since we no longer set
+                // override_text_color globally in apply_theme()
                 ui.visuals_mut().hyperlink_color = egui::Color32::from_rgb(0xe0, 0xa8, 0x40);
                 let mut cache = egui_commonmark::CommonMarkCache::default();
                 egui_commonmark::CommonMarkViewer::new()
