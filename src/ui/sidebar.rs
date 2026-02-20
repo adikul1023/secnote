@@ -116,7 +116,16 @@ pub fn show(
     ui.add_space(6.0);
     ui.horizontal(|ui| {
         ui.add_space(8.0);
-        ui.label(RichText::new("⌕").size(14.0).color(dim));
+        // Paint a simple magnifying glass icon (circle + handle) via painter
+        let (icon_rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), Sense::hover());
+        let painter = ui.painter();
+        let center = icon_rect.center() - egui::vec2(1.5, 1.5);
+        painter.circle_stroke(center, 4.5, Stroke::new(1.5, dim));
+        painter.line_segment(
+            [center + egui::vec2(3.2, 3.2), icon_rect.right_bottom() - egui::vec2(1.0, 1.0)],
+            Stroke::new(1.5, dim),
+        );
+        ui.add_space(2.0);
         let search = ui.add(
             egui::TextEdit::singleline(&mut state.search_query)
                 .hint_text("Search…")
@@ -148,6 +157,7 @@ pub fn show(
     let mut note_rename_done: Option<(Uuid, String)> = None;
     let mut note_selected: Option<Uuid> = None;
     let mut folder_activated: Option<Option<String>> = None; // None = root, Some(path) = folder
+    let mut create_new_note = false;
 
     egui::ScrollArea::vertical()
         .id_salt("sidebar_scroll")
@@ -266,10 +276,41 @@ pub fn show(
                     }
                 });
             }
+            // ── Double-click blank space → new note ─────────────────────────
+            let remaining = ui.available_rect_before_wrap();
+            if remaining.height() > 0.0 {
+                let (blank_rect, blank_resp) = ui.allocate_exact_size(
+                    egui::vec2(ui.available_width(), remaining.height().max(40.0)),
+                    Sense::click(),
+                );
+                if blank_resp.double_clicked() {
+                    create_new_note = true;
+                }
+                // "Double-click to create note" hint
+                if ui.is_rect_visible(blank_rect) {
+                    ui.painter().text(
+                        blank_rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "double-click to create note",
+                        egui::FontId::proportional(11.0),
+                        Color32::from_rgba_unmultiplied(0x80, 0x80, 0x80, 0x30),
+                    );
+                }
+            }
         });
 
-    // ── Mutations ───────────────────────────────────────────────────────────
     if let Some(sel) = note_selected       { state.selected_note = Some(sel); }
+    if create_new_note || false {
+        let mut note = Note::new(state.active_folder.clone());
+        let aad = note.id.as_bytes().to_vec();
+        let (nk, wrapped) = new_note_key(mk, &aad);
+        note.note_key_wrapped = wrapped;
+        note.body_enc = encrypt_note_body(&nk, "", &aad).unwrap_or_default();
+        let id = note.id;
+        store.add_note(note);
+        state.selected_note = Some(id);
+        *dirty_flag = true;
+    }
     if let Some(fa) = folder_activated    { state.active_folder = fa; state.active_tag = None; }
     if let Some((id, t)) = note_rename_done {
         let trimmed = t.trim().to_string();

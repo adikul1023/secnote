@@ -20,64 +20,64 @@ struct Palette {
 fn palette(theme: ThemeName) -> Palette {
     match theme {
         ThemeName::TokyoNight => Palette {
-            bg:           Color32::from_rgba_unmultiplied(0x1a, 0x1b, 0x26, 0xb0),
-            bg_panel:     Color32::from_rgba_unmultiplied(0x16, 0x17, 0x22, 0xa8),
-            bg_widget:    Color32::from_rgba_unmultiplied(0x24, 0x28, 0x3b, 0xc8),
-            bg_editor:    Color32::from_rgba_unmultiplied(0x1a, 0x1b, 0x26, 0xd8),
-            text:         Color32::from_rgb(0xc0, 0xca, 0xf5),
-            text_dim:     Color32::from_rgb(0x56, 0x5f, 0x89),
-            accent:       Color32::from_rgb(0x7a, 0xa2, 0xf7),
-            selection_bg: Color32::from_rgba_unmultiplied(0x7a, 0xa2, 0xf7, 0x40),
-            row_selected: Color32::from_rgba_unmultiplied(0x7a, 0xa2, 0xf7, 0x26),
-            separator:    Color32::from_rgba_unmultiplied(0x7a, 0xa2, 0xf7, 0x22),
+            bg:           Color32::from_rgba_unmultiplied(0x1a, 0x1b, 0x26, 0xa0),
+            bg_panel:     Color32::from_rgba_unmultiplied(0x16, 0x17, 0x22, 0x98),
+            bg_widget:    Color32::from_rgba_unmultiplied(0x24, 0x28, 0x3b, 0xb8),
+            bg_editor:    Color32::from_rgba_unmultiplied(0x1a, 0x1b, 0x26, 0xc8),
+            text:         Color32::from_rgb(0xc4, 0xc8, 0xd4),  // desaturated: less purple tint
+            text_dim:     Color32::from_rgb(0x68, 0x6d, 0x7a),  // desaturated: less purple
+            accent:       Color32::from_rgb(0x7d, 0x9e, 0xd4),  // desaturated blue
+            selection_bg: Color32::from_rgba_unmultiplied(0x7d, 0x9e, 0xd4, 0x38),
+            row_selected: Color32::from_rgba_unmultiplied(0x7d, 0x9e, 0xd4, 0x22),
+            separator:    Color32::from_rgba_unmultiplied(0x7d, 0x9e, 0xd4, 0x1e),
         },
         ThemeName::CatppuccinMocha => Palette {
-            bg:           Color32::from_rgba_unmultiplied(0x1e, 0x1e, 0x2e, 0xb0),
-            bg_panel:     Color32::from_rgba_unmultiplied(0x18, 0x18, 0x25, 0xa8),
-            bg_widget:    Color32::from_rgba_unmultiplied(0x31, 0x32, 0x44, 0xc8),
-            bg_editor:    Color32::from_rgba_unmultiplied(0x1e, 0x1e, 0x2e, 0xd8),
-            text:         Color32::from_rgb(0xcd, 0xd6, 0xf4),
-            text_dim:     Color32::from_rgb(0x58, 0x5b, 0x70),
-            accent:       Color32::from_rgb(0x89, 0xb4, 0xfa),
-            selection_bg: Color32::from_rgba_unmultiplied(0x89, 0xb4, 0xfa, 0x40),
-            row_selected: Color32::from_rgba_unmultiplied(0x89, 0xb4, 0xfa, 0x26),
-            separator:    Color32::from_rgba_unmultiplied(0x89, 0xb4, 0xfa, 0x22),
+            bg:           Color32::from_rgba_unmultiplied(0x1e, 0x1e, 0x2e, 0xa0),
+            bg_panel:     Color32::from_rgba_unmultiplied(0x18, 0x18, 0x25, 0x98),
+            bg_widget:    Color32::from_rgba_unmultiplied(0x31, 0x32, 0x44, 0xb8),
+            bg_editor:    Color32::from_rgba_unmultiplied(0x1e, 0x1e, 0x2e, 0xc8),
+            text:         Color32::from_rgb(0xcb, 0xce, 0xd8),  // desaturated
+            text_dim:     Color32::from_rgb(0x62, 0x64, 0x72),  // desaturated
+            accent:       Color32::from_rgb(0x88, 0xaa, 0xd8),  // desaturated blue
+            selection_bg: Color32::from_rgba_unmultiplied(0x88, 0xaa, 0xd8, 0x38),
+            row_selected: Color32::from_rgba_unmultiplied(0x88, 0xaa, 0xd8, 0x22),
+            separator:    Color32::from_rgba_unmultiplied(0x88, 0xaa, 0xd8, 0x1e),
         },
         ThemeName::Gruvbox => Palette {
-            bg:           Color32::from_rgba_unmultiplied(0x28, 0x28, 0x28, 0xb0),
-            bg_panel:     Color32::from_rgba_unmultiplied(0x1d, 0x20, 0x21, 0xa8),
-            bg_widget:    Color32::from_rgba_unmultiplied(0x3c, 0x38, 0x36, 0xc8),
-            bg_editor:    Color32::from_rgba_unmultiplied(0x28, 0x28, 0x28, 0xd8),
-            text:         Color32::from_rgb(0xeb, 0xdb, 0xb2),
-            text_dim:     Color32::from_rgb(0x92, 0x83, 0x74),
-            accent:       Color32::from_rgb(0xfa, 0xbd, 0x2f),
-            selection_bg: Color32::from_rgba_unmultiplied(0xfa, 0xbd, 0x2f, 0x35),
-            row_selected: Color32::from_rgba_unmultiplied(0xfa, 0xbd, 0x2f, 0x22),
-            separator:    Color32::from_rgba_unmultiplied(0xfa, 0xbd, 0x2f, 0x20),
+            bg:           Color32::from_rgba_unmultiplied(0x28, 0x28, 0x28, 0xa0),
+            bg_panel:     Color32::from_rgba_unmultiplied(0x1d, 0x20, 0x21, 0x98),
+            bg_widget:    Color32::from_rgba_unmultiplied(0x3c, 0x38, 0x36, 0xb8),
+            bg_editor:    Color32::from_rgba_unmultiplied(0x28, 0x28, 0x28, 0xc8),
+            text:         Color32::from_rgb(0xd8, 0xd2, 0xc0),  // desaturated warm
+            text_dim:     Color32::from_rgb(0x8a, 0x84, 0x78),  // desaturated
+            accent:       Color32::from_rgb(0xcc, 0xa8, 0x40),  // desaturated gold
+            selection_bg: Color32::from_rgba_unmultiplied(0xcc, 0xa8, 0x40, 0x32),
+            row_selected: Color32::from_rgba_unmultiplied(0xcc, 0xa8, 0x40, 0x20),
+            separator:    Color32::from_rgba_unmultiplied(0xcc, 0xa8, 0x40, 0x1c),
         },
         ThemeName::Nord => Palette {
-            bg:           Color32::from_rgba_unmultiplied(0x2e, 0x34, 0x40, 0xb0),
-            bg_panel:     Color32::from_rgba_unmultiplied(0x24, 0x27, 0x32, 0xa8),
-            bg_widget:    Color32::from_rgba_unmultiplied(0x3b, 0x42, 0x52, 0xc8),
-            bg_editor:    Color32::from_rgba_unmultiplied(0x2e, 0x34, 0x40, 0xd8),
-            text:         Color32::from_rgb(0xd8, 0xde, 0xe9),
-            text_dim:     Color32::from_rgb(0x61, 0x6e, 0x88),
-            accent:       Color32::from_rgb(0x88, 0xc0, 0xd0),
-            selection_bg: Color32::from_rgba_unmultiplied(0x88, 0xc0, 0xd0, 0x40),
-            row_selected: Color32::from_rgba_unmultiplied(0x88, 0xc0, 0xd0, 0x26),
-            separator:    Color32::from_rgba_unmultiplied(0x88, 0xc0, 0xd0, 0x22),
+            bg:           Color32::from_rgba_unmultiplied(0x2e, 0x34, 0x40, 0xa0),
+            bg_panel:     Color32::from_rgba_unmultiplied(0x24, 0x27, 0x32, 0x98),
+            bg_widget:    Color32::from_rgba_unmultiplied(0x3b, 0x42, 0x52, 0xb8),
+            bg_editor:    Color32::from_rgba_unmultiplied(0x2e, 0x34, 0x40, 0xc8),
+            text:         Color32::from_rgb(0xd2, 0xd6, 0xdc),  // desaturated
+            text_dim:     Color32::from_rgb(0x68, 0x72, 0x84),  // desaturated
+            accent:       Color32::from_rgb(0x80, 0xaa, 0xb8),  // desaturated teal
+            selection_bg: Color32::from_rgba_unmultiplied(0x80, 0xaa, 0xb8, 0x38),
+            row_selected: Color32::from_rgba_unmultiplied(0x80, 0xaa, 0xb8, 0x22),
+            separator:    Color32::from_rgba_unmultiplied(0x80, 0xaa, 0xb8, 0x1e),
         },
         ThemeName::OneDark => Palette {
-            bg:           Color32::from_rgba_unmultiplied(0x28, 0x2c, 0x34, 0xb0),
-            bg_panel:     Color32::from_rgba_unmultiplied(0x21, 0x25, 0x2b, 0xa8),
-            bg_widget:    Color32::from_rgba_unmultiplied(0x3e, 0x44, 0x51, 0xc8),
-            bg_editor:    Color32::from_rgba_unmultiplied(0x28, 0x2c, 0x34, 0xd8),
-            text:         Color32::from_rgb(0xab, 0xb2, 0xbf),
-            text_dim:     Color32::from_rgb(0x5c, 0x63, 0x70),
-            accent:       Color32::from_rgb(0x61, 0xaf, 0xef),
-            selection_bg: Color32::from_rgba_unmultiplied(0x61, 0xaf, 0xef, 0x40),
-            row_selected: Color32::from_rgba_unmultiplied(0x61, 0xaf, 0xef, 0x26),
-            separator:    Color32::from_rgba_unmultiplied(0x61, 0xaf, 0xef, 0x22),
+            bg:           Color32::from_rgba_unmultiplied(0x28, 0x2c, 0x34, 0xa0),
+            bg_panel:     Color32::from_rgba_unmultiplied(0x21, 0x25, 0x2b, 0x98),
+            bg_widget:    Color32::from_rgba_unmultiplied(0x3e, 0x44, 0x51, 0xb8),
+            bg_editor:    Color32::from_rgba_unmultiplied(0x28, 0x2c, 0x34, 0xc8),
+            text:         Color32::from_rgb(0xb0, 0xb6, 0xbf),  // desaturated
+            text_dim:     Color32::from_rgb(0x64, 0x69, 0x72),  // desaturated
+            accent:       Color32::from_rgb(0x62, 0xa0, 0xd8),  // desaturated blue
+            selection_bg: Color32::from_rgba_unmultiplied(0x62, 0xa0, 0xd8, 0x38),
+            row_selected: Color32::from_rgba_unmultiplied(0x62, 0xa0, 0xd8, 0x22),
+            separator:    Color32::from_rgba_unmultiplied(0x62, 0xa0, 0xd8, 0x1e),
         },
     }
 }
@@ -133,8 +133,8 @@ pub fn apply_theme(ctx: &Context, theme: ThemeName) {
     // Selection
     visuals.selection.bg_fill                      = p.selection_bg;
     visuals.selection.stroke                       = Stroke::new(1.0, p.accent);
-    // Hyperlinks: bright web-blue so they're always visually distinct from body text
-    visuals.hyperlink_color                        = Color32::from_rgb(0x58, 0xa6, 0xff);
+    // Hyperlinks: amber/orange — distinguishable from any theme's blue/gray text
+    visuals.hyperlink_color                        = Color32::from_rgb(0xe0, 0xa8, 0x40);
 
     // No visible window border
     visuals.window_stroke                          = Stroke::new(0.0, Color32::TRANSPARENT);

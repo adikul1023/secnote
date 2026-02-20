@@ -331,8 +331,8 @@ pub fn show(
         .auto_shrink([false; 2])
         .show(ui, |ui| {
             if editor_state.show_preview {
-                // Make hyperlinks visually obvious: bright color + underline stroke
-                ui.visuals_mut().hyperlink_color = egui::Color32::from_rgb(0x58, 0xa6, 0xff);
+                // Make hyperlinks visually obvious: amber, contrasts with all theme text
+                ui.visuals_mut().hyperlink_color = egui::Color32::from_rgb(0xe0, 0xa8, 0x40);
                 let mut cache = egui_commonmark::CommonMarkCache::default();
                 egui_commonmark::CommonMarkViewer::new()
                     .show(ui, &mut cache, &editor_state.active_body.clone());
