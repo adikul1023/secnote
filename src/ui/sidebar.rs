@@ -224,7 +224,7 @@ pub fn show(
                         state.new_folder_just_opened = false;
                     }
                     let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
-                    if enter || ui.small_button("✓").clicked() {
+                    if enter || ui.small_button("OK").clicked() {
                         let raw = state.new_folder_input.trim().to_string();
                         if !raw.is_empty() && store.folders.len() < MAX_FOLDERS {
                             let parent_depth = if state.new_folder_parent.is_empty() { 0 }
@@ -242,7 +242,7 @@ pub fn show(
                         state.new_folder_input.clear();
                         state.new_folder_parent.clear();
                     }
-                    if ui.small_button("✕").clicked() {
+                    if ui.small_button("X").clicked() {
                         state.show_new_folder = false;
                         state.new_folder_input.clear();
                         state.new_folder_parent.clear();
@@ -394,7 +394,7 @@ pub fn show(
             *dirty_flag = true;
         }
         ui.add_space(4.0);
-        let nf = egui::Button::new(RichText::new("📁").color(dim))
+        let nf = egui::Button::new(RichText::new("+dir").color(dim))
             .fill(Color32::TRANSPARENT)
             .stroke(Stroke::new(1.0, sep_col))
             .rounding(4.0);
@@ -482,16 +482,16 @@ fn render_folder_subtree(
     }
 
     resp.context_menu(|ui| {
-        if depth < MAX_FOLDER_DEPTH - 1 && ui.button("📁 New subfolder").clicked() {
+        if depth < MAX_FOLDER_DEPTH - 1 && ui.button("New subfolder").clicked() {
             *new_subfolder_parent = Some(node.path.clone());
             ui.close_menu();
         }
-        if ui.button("✏ Rename folder").clicked() {
+        if ui.button("Rename folder").clicked() {
             state.renaming_folder = Some(node.path.clone());
             state.folder_rename_buffer = node.name.clone();
             ui.close_menu();
         }
-        if ui.button("🗑 Delete folder").clicked() {
+        if ui.button("Delete folder").clicked() {
             *folder_to_delete = Some(node.path.clone());
             ui.close_menu();
         }
@@ -563,12 +563,12 @@ fn render_note_row(
     if resp.double_clicked() { state.renaming_note = Some(id); state.rename_buffer = title.to_string(); }
 
     resp.context_menu(|ui| {
-        if ui.button("✏ Rename").clicked() {
+        if ui.button("Rename").clicked() {
             state.renaming_note = Some(id);
             state.rename_buffer = title.to_string();
             ui.close_menu();
         }
-        if ui.button("🗑 Delete note").clicked() {
+        if ui.button("Delete note").clicked() {
             *note_to_delete = Some(id);
             ui.close_menu();
         }
@@ -661,3 +661,4 @@ fn rename_folder_in_store(store: &mut NotesStore, old: &str, new: &str) {
         }
     }
 }
+
