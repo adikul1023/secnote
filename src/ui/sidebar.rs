@@ -283,10 +283,16 @@ pub fn show(
         if state.selected_note == Some(id) { state.selected_note = None; }
         *dirty_flag = true;
     }
-    if let Some((old, new)) = folder_renamed {
-        if !new.is_empty() && !store.folders.contains(&new) {
-            rename_folder_in_store(store, &old, &new);
-            if state.active_folder.as_deref() == Some(&old) { state.active_folder = Some(new); }
+    if let Some((old, new_name)) = folder_renamed {
+        // Compose full new path: keep parent prefix, replace only the last segment
+        let new_path = if let Some(pos) = old.rfind('/') {
+            format!("{}/{}", &old[..pos], new_name)
+        } else {
+            new_name.clone()
+        };
+        if !new_name.is_empty() && !store.folders.contains(&new_path) {
+            rename_folder_in_store(store, &old, &new_path);
+            if state.active_folder.as_deref() == Some(&old) { state.active_folder = Some(new_path); }
             state.renaming_folder = None;
             *dirty_flag = true;
         }
@@ -341,7 +347,7 @@ pub fn show(
 // Render folder + its children recursively
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::only_used_in_recursion)]
 fn render_folder_subtree(
     ui: &mut Ui,
     node: &FolderNode,
@@ -377,7 +383,7 @@ fn render_folder_subtree(
         .collect();
 
     let has_children = !node.children.is_empty() || !folder_notes.is_empty();
-    let chevron = if !has_children { "  " } else if is_expanded { "▾ " } else { "▸ " };
+    let chevron = if !has_children { "  " } else if is_expanded { "v " } else { "> " };
     let count_badge = if !folder_notes.is_empty() { format!("  {}", folder_notes.len()) } else { String::new() };
     let label = format!("{chevron}📁 {}{count_badge}", node.name);
 
@@ -506,6 +512,7 @@ fn render_note_row(
 //   bg = row_sel when selected, row_sel*0.5 on hover
 // ---------------------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 fn row_item(
     ui: &mut Ui,
     depth: usize,

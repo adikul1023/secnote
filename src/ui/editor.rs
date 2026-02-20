@@ -238,8 +238,14 @@ pub fn show(
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             // Metadata toggle
             let meta_col = if editor_state.show_metadata { Color32::LIGHT_GRAY } else { Color32::DARK_GRAY };
-            if ui.button(RichText::new("ℹ").color(meta_col)).on_hover_text("Toggle metadata").clicked() {
+            if ui.button(RichText::new("i").color(meta_col)).on_hover_text("Toggle metadata").clicked() {
                 editor_state.show_metadata = !editor_state.show_metadata;
+            }
+
+            // Preview toggle
+            let preview_col = if editor_state.show_preview { Color32::LIGHT_GRAY } else { Color32::DARK_GRAY };
+            if ui.button(RichText::new(if editor_state.show_preview { "Edit" } else { "Preview" }).small().color(preview_col)).clicked() {
+                editor_state.show_preview = !editor_state.show_preview;
             }
 
             // Font size controls
@@ -249,7 +255,7 @@ pub fn show(
                 // The actual change happens in settings.rs or via keyboard shortcut in app.rs.
             }
             ui.label(RichText::new(format!("{fs:.0}pt")).small().color(Color32::GRAY));
-            if ui.small_button("−").on_hover_text("Decrease font size").clicked() {
+            if ui.small_button("-").on_hover_text("Decrease font size").clicked() {
             }
         });
     });
@@ -320,13 +326,6 @@ pub fn show(
     // -----------------------------------------------------------------------
     // Body -- editor or preview
     // -----------------------------------------------------------------------
-    // Preview toggle — keyboard shortcut only (Ctrl+P); no toolbar button.
-    ui.input_mut(|i| {
-        if i.consume_key(egui::Modifiers::CTRL, Key::P) {
-            editor_state.show_preview = !editor_state.show_preview;
-        }
-    });
-
     egui::ScrollArea::vertical()
         .id_salt("editor_scroll")
         .auto_shrink([false; 2])

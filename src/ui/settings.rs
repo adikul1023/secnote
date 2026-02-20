@@ -24,7 +24,7 @@ pub fn show(
 
     // Header
     ui.horizontal(|ui| {
-        if ui.button("← Back").clicked() {
+        if ui.button("< Back").clicked() {
             go_back = true;
         }
         ui.heading("Settings");
