@@ -133,7 +133,8 @@ pub fn apply_theme(ctx: &Context, theme: ThemeName) {
     // Selection
     visuals.selection.bg_fill                      = p.selection_bg;
     visuals.selection.stroke                       = Stroke::new(1.0, p.accent);
-    visuals.hyperlink_color                        = p.accent;
+    // Hyperlinks: bright web-blue so they're always visually distinct from body text
+    visuals.hyperlink_color                        = Color32::from_rgb(0x58, 0xa6, 0xff);
 
     // No visible window border
     visuals.window_stroke                          = Stroke::new(0.0, Color32::TRANSPARENT);
