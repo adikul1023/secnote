@@ -331,7 +331,10 @@ pub fn show(
         .auto_shrink([false; 2])
         .show(ui, |ui| {
             if editor_state.show_preview {
-                // Make hyperlinks visually obvious: amber, contrasts with all theme text
+                // Clear override_text_color so hyperlink_color is actually used
+                // (apply_theme sets override_text_color which overrides *all* text
+                //  including links, making them indistinguishable from body text)
+                ui.visuals_mut().override_text_color = None;
                 ui.visuals_mut().hyperlink_color = egui::Color32::from_rgb(0xe0, 0xa8, 0x40);
                 let mut cache = egui_commonmark::CommonMarkCache::default();
                 egui_commonmark::CommonMarkViewer::new()

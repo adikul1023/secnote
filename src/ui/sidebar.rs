@@ -174,7 +174,6 @@ pub fn show(
 
             if row_item(ui, 0, "  All Notes", root_selected, false, accent, row_sel, dim, text_col).clicked() {
                 folder_activated = Some(None);
-                // keep selected_note as is — just filter to all
             }
 
             let tree = build_tree(&store.folders.clone());
@@ -276,7 +275,7 @@ pub fn show(
                     }
                 });
             }
-            // ── Double-click blank space → new note ─────────────────────────
+            // ── Double-click blank space → new note; right-click → context menu ──
             let remaining = ui.available_rect_before_wrap();
             if remaining.height() > 0.0 {
                 let (blank_rect, blank_resp) = ui.allocate_exact_size(
@@ -286,7 +285,32 @@ pub fn show(
                 if blank_resp.double_clicked() {
                     create_new_note = true;
                 }
-                // "Double-click to create note" hint
+                // Right-click context menu
+                blank_resp.context_menu(|ui| {
+                    if ui.button("  New Note").clicked() {
+                        create_new_note = true;
+                        ui.close_menu();
+                    }
+                    if ui.button("  New Folder").clicked() {
+                        state.show_new_folder = true;
+                        state.new_folder_just_opened = true;
+                        state.new_folder_parent.clear();
+                        state.new_folder_input.clear();
+                        ui.close_menu();
+                    }
+                    ui.separator();
+                    if ui.button("  Expand All").clicked() {
+                        for f in store.folders.iter() {
+                            state.expanded_folders.insert(f.clone());
+                        }
+                        ui.close_menu();
+                    }
+                    if ui.button("  Collapse All").clicked() {
+                        state.expanded_folders.clear();
+                        ui.close_menu();
+                    }
+                });
+                // Faint hint
                 if ui.is_rect_visible(blank_rect) {
                     ui.painter().text(
                         blank_rect.center(),
@@ -300,7 +324,7 @@ pub fn show(
         });
 
     if let Some(sel) = note_selected       { state.selected_note = Some(sel); }
-    if create_new_note || false {
+    if create_new_note {
         let mut note = Note::new(state.active_folder.clone());
         let aad = note.id.as_bytes().to_vec();
         let (nk, wrapped) = new_note_key(mk, &aad);
