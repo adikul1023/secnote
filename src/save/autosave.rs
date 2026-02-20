@@ -159,10 +159,10 @@ fn flush_if_dirty(
     state: &Arc<Mutex<AutoSaveState>>,
     event_tx: &std::sync::mpsc::Sender<AppEvent>,
 ) {
-    // Prepare everything under a single lock: encrypt store, bump version,
-    // compute HMAC, serialise config — then release the lock for I/O.
+    // Prepare everything under a single lock: encrypt store, build a config
+    // snapshot with bumped version — but do NOT mutate s.config yet.
     let snapshot = {
-        let mut s = state.lock().unwrap();
+        let s = state.lock().unwrap();
         if !s.dirty {
             return;
         }
@@ -178,46 +178,40 @@ fn flush_if_dirty(
             }
         };
 
-        // PENTEST-F1 FIX: bump vault_version + recompute HMAC inside the
-        // same critical section that produced the encrypted store.
-        s.config.vault_version = s.config.vault_version.saturating_add(1);
-        // Clone mk bytes to avoid borrow conflict with config
+        // Build a config snapshot with vault_version + 1 and fresh HMAC.
+        // s.config is NOT mutated here — only committed after both writes succeed.
+        let new_version = s.config.vault_version.saturating_add(1);
+        let mut config_snapshot = s.config.clone();
+        config_snapshot.vault_version = new_version;
         let mk_bytes = s.master_key.as_ref().map(|m| *m.as_bytes());
-        let config_json = if let Some(mut mb) = mk_bytes {
+        let new_config_json = if let Some(mut mb) = mk_bytes {
             let tmp_mk = MasterKey::new(&mut mb);
-            crate::crypto::keys::compute_config_hmac(&tmp_mk, &mut s.config);
-            serde_json::to_vec_pretty(&s.config).unwrap_or_default()
+            crate::crypto::keys::compute_config_hmac(&tmp_mk, &mut config_snapshot);
+            serde_json::to_vec_pretty(&config_snapshot).unwrap_or_default()
         } else {
             vec![]
         };
+        // Serialize old config for rollback if notes.enc write fails
+        let old_config_json = serde_json::to_vec_pretty(&s.config).unwrap_or_default();
 
-        (enc, s.notes_path.clone(), s.config_path.clone(), config_json)
+        (enc, s.notes_path.clone(), s.config_path.clone(),
+         new_config_json, old_config_json, config_snapshot)
     };
     // Lock released — perform I/O without holding the mutex.
 
-    let (encrypted, notes_path, config_path, config_json) = snapshot;
+    let (encrypted, notes_path, config_path,
+         new_config_json, old_config_json, config_snapshot) = snapshot;
 
     // ── Write order: config.json FIRST, then notes.enc ──────────────
-    // This guarantees vault_version is persisted before the data it
-    // describes. On crash between the two writes:
-    //   • config has version N+1, notes.enc still has version-N data
-    //   • App loads fine (no version inside notes.enc yet) and next
-    //     save will write version N+2.
-    //   • An attacker cannot silently replace notes.enc with an older
-    //     copy that was written under version ≤ N and have the version
-    //     match, because config already records N+1.
-
     // 1. config.json (new vault_version + HMAC)
-    if !config_json.is_empty() {
+    if !new_config_json.is_empty() {
         let config_dir = config_path.parent()
             .unwrap_or_else(|| std::path::Path::new("."));
-        if let Err(e) = atomic_write(config_dir, &config_path, &config_json) {
-            // Config write failed — do NOT proceed to write notes.enc,
-            // otherwise version and data would be out of sync.
+        if let Err(e) = atomic_write(config_dir, &config_path, &new_config_json) {
+            // Config write failed — do NOT proceed to write notes.enc.
+            // In-memory s.config is untouched, so next cycle retries cleanly.
             let mut s = state.lock().unwrap();
             s.status = SaveStatus::Error;
-            // Roll back the in-memory version bump so it retries next cycle
-            s.config.vault_version = s.config.vault_version.saturating_sub(1);
             event_tx.send(AppEvent::SaveFailed(format!("config write: {e}"))).ok();
             return;
         }
@@ -227,12 +221,22 @@ fn flush_if_dirty(
     let dir = notes_path.parent().unwrap_or_else(|| std::path::Path::new("."));
     match atomic_write(dir, &notes_path, &encrypted) {
         Ok(()) => {
+            // Both writes succeeded — commit the bumped version to in-memory state.
             let mut s = state.lock().unwrap();
+            s.config = config_snapshot;
             s.dirty = false;
             s.status = SaveStatus::Saved;
             event_tx.send(AppEvent::SaveCompleted).ok();
         }
         Err(e) => {
+            // notes.enc failed — roll back config.json to old version so
+            // vault_version on disk matches the data that's actually there.
+            if !old_config_json.is_empty() {
+                let config_dir = config_path.parent()
+                    .unwrap_or_else(|| std::path::Path::new("."));
+                let _ = atomic_write(config_dir, &config_path, &old_config_json);
+            }
+            // In-memory s.config was never mutated, so next cycle retries cleanly.
             let mut s = state.lock().unwrap();
             s.status = SaveStatus::Error;
             event_tx.send(AppEvent::SaveFailed(e)).ok();

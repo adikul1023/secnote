@@ -540,27 +540,43 @@ impl SecureNotesApp {
                     let mk_bytes_opt = s.master_key.as_ref().map(|m| *m.as_bytes());
                     let enc_result = s.master_key.as_ref().and_then(|mk| encrypt_store(mk, &s.store).ok());
                     if let (Some(enc), Some(mut mb)) = (enc_result, mk_bytes_opt) {
-                        // Bump vault_version + HMAC + write config FIRST
-                        s.config.vault_version = s.config.vault_version.saturating_add(1);
+                        // Build config snapshot with bumped version — don't
+                        // mutate s.config until both writes succeed.
+                        let mut config_snap = s.config.clone();
+                        config_snap.vault_version = config_snap.vault_version.saturating_add(1);
                         let tmp_mk = MasterKey::new(&mut mb);
-                        crate::crypto::keys::compute_config_hmac(&tmp_mk, &mut s.config);
-                        let config_json = serde_json::to_vec_pretty(&s.config)
+                        crate::crypto::keys::compute_config_hmac(&tmp_mk, &mut config_snap);
+                        let new_config_json = serde_json::to_vec_pretty(&config_snap)
+                            .unwrap_or_default();
+                        let old_config_json = serde_json::to_vec_pretty(&s.config)
                             .unwrap_or_default();
                         let config_dir = s.config_path.parent()
                             .unwrap_or_else(|| std::path::Path::new("."));
-                        let _ = crate::save::autosave::atomic_write_pub(
+                        // Write config FIRST
+                        if crate::save::autosave::atomic_write_pub(
                             config_dir,
                             &s.config_path,
-                            &config_json,
-                        );
-                        // Then write notes.enc
-                        let dir = u.notes_path.parent()
-                            .unwrap_or_else(|| std::path::Path::new("."));
-                        let _ = crate::save::autosave::atomic_write_pub(
-                            dir,
-                            &u.notes_path,
-                            &enc,
-                        );
+                            &new_config_json,
+                        ).is_ok() {
+                            // Then write notes.enc
+                            let dir = u.notes_path.parent()
+                                .unwrap_or_else(|| std::path::Path::new("."));
+                            if crate::save::autosave::atomic_write_pub(
+                                dir,
+                                &u.notes_path,
+                                &enc,
+                            ).is_ok() {
+                                // Both succeeded — commit version
+                                s.config = config_snap;
+                            } else {
+                                // notes.enc failed — roll back config.json
+                                let _ = crate::save::autosave::atomic_write_pub(
+                                    config_dir,
+                                    &s.config_path,
+                                    &old_config_json,
+                                );
+                            }
+                        }
                     }
                     s.dirty = false;
                 }
