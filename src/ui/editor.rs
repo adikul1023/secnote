@@ -133,7 +133,7 @@ pub fn show(
     selected: Option<Uuid>,
     editor_state: &mut EditorState,
     dirty_flag: &mut bool,
-    save_status: SaveStatus,
+    _save_status: SaveStatus,
     mk: &MasterKey,
     settings: &AppSettings,
 ) {
@@ -254,34 +254,32 @@ pub fn show(
         });
     });
 
-    ui.separator();
+    // ── Title ─────────────────────────────────────────────────────────────
     let title_resp = ui.add(
         egui::TextEdit::singleline(&mut note.title)
-            .font(FontId::proportional(22.0))
+            .font(FontId::proportional(20.0))
             .desired_width(f32::INFINITY)
-            .hint_text("Note title..."),
+            .hint_text("Untitled")
+            .frame(false),
     );
     if title_resp.changed() {
         note.touch();
         *dirty_flag = true;
     }
 
-    ui.add_space(4.0);
+    ui.add_space(6.0);
 
-    // -----------------------------------------------------------------------
-    // Tags row
-    // -----------------------------------------------------------------------
+    // ── Tags row ─────────────────────────────────────────────────────────────
     ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
         let mut tag_to_remove: Option<usize> = None;
         for (i, tag) in note.tags.iter().enumerate() {
-            ui.label(
-                RichText::new(format!("tag: {tag}"))
-                    .color(Color32::from_rgb(100, 160, 240))
-                    .small(),
-            );
-            if ui.small_button("x").clicked() {
-                tag_to_remove = Some(i);
-            }
+            let chip = egui::Button::new(RichText::new(format!("# {tag}")).size(11.0)
+                .color(Color32::from_rgb(100, 160, 240)))
+                .fill(Color32::from_rgba_unmultiplied(0x61, 0xaf, 0xef, 0x22))
+                .stroke(egui::Stroke::new(0.5, Color32::from_rgba_unmultiplied(0x61, 0xaf, 0xef, 0x55)))
+                .rounding(8.0);
+            if ui.add(chip).secondary_clicked() { tag_to_remove = Some(i); }
         }
         if let Some(i) = tag_to_remove {
             note.tags.remove(i);
@@ -291,8 +289,9 @@ pub fn show(
 
         let tag_resp = ui.add(
             egui::TextEdit::singleline(&mut editor_state.tag_input)
-                .desired_width(100.0)
-                .hint_text("Add tag..."),
+                .desired_width(80.0)
+                .hint_text("+ tag")
+                .frame(false),
         );
         if tag_resp.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
             let raw = editor_state.tag_input.trim().to_string();
@@ -306,52 +305,31 @@ pub fn show(
         }
     });
 
-    ui.separator();
-
-    // -----------------------------------------------------------------------
-    // Formatting toolbar
-    // -----------------------------------------------------------------------
-    ui.horizontal(|ui| {
-        let shortcuts: &[(&str, &str, &str)] = &[
-            ("B", "Bold", "**"),
-            ("I", "Italic", "_"),
-            ("H", "Heading", "## "),
-            ("`", "Inline Code", "`"),
-        ];
-
-        for (icon, tooltip, syntax) in shortcuts {
-            if ui.button(*icon).on_hover_text(*tooltip).clicked() {
-                insert_markdown_syntax(&mut editor_state.active_body, syntax);
-                re_encrypt_body_cached(note, &editor_state.active_body, mk, &mut editor_state.cached_note_key);
-                note.touch();
-                *dirty_flag = true;
-            }
-        }
-
-        ui.separator();
-
-        if ui.button("Link").on_hover_text("Insert link").clicked() {
-            editor_state.active_body.push_str("[text](url)");
-            re_encrypt_body_cached(note, &editor_state.active_body, mk, &mut editor_state.cached_note_key);
-            note.touch();
-            *dirty_flag = true;
-        }
-
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let preview_label = if editor_state.show_preview { "Edit" } else { "Preview" };
-            if ui.button(preview_label).clicked() {
-                editor_state.show_preview = !editor_state.show_preview;
-            }
-        });
-    });
-
-    ui.separator();
+    // Thin separator line
+    {
+        let r = ui.available_rect_before_wrap();
+        ui.painter().hline(
+            r.x_range(),
+            r.top(),
+            egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(0x88, 0x88, 0x88, 0x30)),
+        );
+        ui.add_space(1.0);
+    }
+    ui.add_space(4.0);
 
     // -----------------------------------------------------------------------
     // Body -- editor or preview
     // -----------------------------------------------------------------------
+    // Preview toggle — keyboard shortcut only (Ctrl+P); no toolbar button.
+    ui.input_mut(|i| {
+        if i.consume_key(egui::Modifiers::CTRL, Key::P) {
+            editor_state.show_preview = !editor_state.show_preview;
+        }
+    });
+
     egui::ScrollArea::vertical()
         .id_salt("editor_scroll")
+        .auto_shrink([false; 2])
         .show(ui, |ui| {
             if editor_state.show_preview {
                 let mut cache = egui_commonmark::CommonMarkCache::default();
@@ -397,8 +375,9 @@ pub fn show(
                 let body_resp = ui.add(
                     egui::TextEdit::multiline(&mut editor_state.active_body)
                         .desired_width(f32::INFINITY)
-                        .desired_rows(30)
+                        .min_size(ui.available_size())
                         .font(font)
+                        .frame(false)
                         .hint_text("Write your note in Markdown..."),
                 );
 
@@ -477,27 +456,6 @@ pub fn show(
             });
     }
 
-    // -----------------------------------------------------------------------
-    // Status bar (inline — the panel-level one in status_bar.rs supersedes this)
-    // -----------------------------------------------------------------------
-    ui.separator();
-    ui.horizontal(|ui| {
-        let wc = editor_state.active_body.split_whitespace().count();
-        ui.label(
-            RichText::new(format!("{wc} words"))
-                .small()
-                .color(Color32::GRAY),
-        );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let (status_text, status_color) = match save_status {
-                SaveStatus::Saved => ("Saved", Color32::GREEN),
-                SaveStatus::Saving => ("Saving...", Color32::YELLOW),
-                SaveStatus::Error => ("Save error", Color32::RED),
-                SaveStatus::Idle => ("", Color32::GRAY),
-            };
-            ui.label(RichText::new(status_text).small().color(status_color));
-        });
-    });
 }
 
 // ---------------------------------------------------------------------------

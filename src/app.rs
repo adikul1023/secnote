@@ -348,7 +348,9 @@ impl eframe::App for SecureNotesApp {
         // -----------------------------------------------------------------------
         // Central panel — route by state
         // -----------------------------------------------------------------------
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none().fill(egui::Color32::TRANSPARENT))
+            .show(ctx, |ui| {
             match &mut self.state {
                 AppState::Setup(wizard) => {
                     wizard.show(ui);
@@ -400,7 +402,9 @@ impl eframe::App for SecureNotesApp {
                                 );
                             });
 
-                        egui::CentralPanel::default().show_inside(ui, |ui| {
+                        egui::CentralPanel::default()
+                            .frame(egui::Frame::none().fill(egui::Color32::TRANSPARENT))
+                            .show_inside(ui, |ui| {
                             let selected = u.sidebar.selected_note;
                             let save_status = u.autosave.lock().unwrap().status;
                             let mut guard = u.autosave.lock().unwrap();
