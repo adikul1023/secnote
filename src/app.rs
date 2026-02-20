@@ -58,6 +58,7 @@ struct UnlockedState {
 pub struct SecureNotesApp {
     state: AppState,
     data_dir: PathBuf,
+    mica_applied: bool,
 }
 
 impl SecureNotesApp {
@@ -85,7 +86,7 @@ impl SecureNotesApp {
                 Some(c) => c,
                 None => {
                     // Config is unreadable or corrupt — force re-setup.
-                    return Self { state: AppState::Setup(SetupWizard::new()), data_dir };
+                    return Self { state: AppState::Setup(SetupWizard::new()), data_dir, mica_applied: false };
                 }
             };
             let encrypted_notes = std::fs::read(&notes_path).unwrap_or_default();
@@ -95,12 +96,18 @@ impl SecureNotesApp {
             AppState::Setup(SetupWizard::new())
         };
 
-        Self { state, data_dir }
+        Self { state, data_dir, mica_applied: false }
     }
 }
 
 impl eframe::App for SecureNotesApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Enable Mica/Acrylic on first frame (window must already exist)
+        if !self.mica_applied {
+            crate::try_enable_mica("Secure Notes");
+            self.mica_applied = true;
+        }
+
         // Apply theme
         if let AppState::Unlocked(ref u) = self.state {
             let settings = u.autosave.lock().unwrap().settings.clone();
