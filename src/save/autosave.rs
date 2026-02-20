@@ -40,6 +40,10 @@ pub struct AutoSaveState {
     pub settings: AppSettings,
     /// Path to notes.enc — temp file is created in the same directory.
     pub notes_path: PathBuf,
+    /// Path to config.json — updated on each save for vault_version bump.
+    pub config_path: PathBuf,
+    /// In-memory config — vault_version is incremented on each save.
+    pub config: crate::store::notes::AppConfig,
 }
 
 impl AutoSaveState {
@@ -47,6 +51,8 @@ impl AutoSaveState {
         store: NotesStore,
         master_key: MasterKey,
         notes_path: PathBuf,
+        config_path: PathBuf,
+        config: crate::store::notes::AppConfig,
         settings: AppSettings,
     ) -> Self {
         Self {
@@ -56,6 +62,8 @@ impl AutoSaveState {
             status: SaveStatus::Saved,
             settings,
             notes_path,
+            config_path,
+            config,
         }
     }
 
@@ -151,9 +159,10 @@ fn flush_if_dirty(
     state: &Arc<Mutex<AutoSaveState>>,
     event_tx: &std::sync::mpsc::Sender<AppEvent>,
 ) {
-    // Check dirty flag and get a snapshot of what we need
-    let (dirty, encrypted, notes_path) = {
-        let s = state.lock().unwrap();
+    // Prepare everything under a single lock: encrypt store, bump version,
+    // compute HMAC, serialise config — then release the lock for I/O.
+    let snapshot = {
+        let mut s = state.lock().unwrap();
         if !s.dirty {
             return;
         }
@@ -168,14 +177,53 @@ fn flush_if_dirty(
                 return;
             }
         };
-        (true, enc, s.notes_path.clone())
-    };
 
-    if !dirty {
-        return;
+        // PENTEST-F1 FIX: bump vault_version + recompute HMAC inside the
+        // same critical section that produced the encrypted store.
+        s.config.vault_version = s.config.vault_version.saturating_add(1);
+        // Clone mk bytes to avoid borrow conflict with config
+        let mk_bytes = s.master_key.as_ref().map(|m| *m.as_bytes());
+        let config_json = if let Some(mut mb) = mk_bytes {
+            let tmp_mk = MasterKey::new(&mut mb);
+            crate::crypto::keys::compute_config_hmac(&tmp_mk, &mut s.config);
+            serde_json::to_vec_pretty(&s.config).unwrap_or_default()
+        } else {
+            vec![]
+        };
+
+        (enc, s.notes_path.clone(), s.config_path.clone(), config_json)
+    };
+    // Lock released — perform I/O without holding the mutex.
+
+    let (encrypted, notes_path, config_path, config_json) = snapshot;
+
+    // ── Write order: config.json FIRST, then notes.enc ──────────────
+    // This guarantees vault_version is persisted before the data it
+    // describes. On crash between the two writes:
+    //   • config has version N+1, notes.enc still has version-N data
+    //   • App loads fine (no version inside notes.enc yet) and next
+    //     save will write version N+2.
+    //   • An attacker cannot silently replace notes.enc with an older
+    //     copy that was written under version ≤ N and have the version
+    //     match, because config already records N+1.
+
+    // 1. config.json (new vault_version + HMAC)
+    if !config_json.is_empty() {
+        let config_dir = config_path.parent()
+            .unwrap_or_else(|| std::path::Path::new("."));
+        if let Err(e) = atomic_write(config_dir, &config_path, &config_json) {
+            // Config write failed — do NOT proceed to write notes.enc,
+            // otherwise version and data would be out of sync.
+            let mut s = state.lock().unwrap();
+            s.status = SaveStatus::Error;
+            // Roll back the in-memory version bump so it retries next cycle
+            s.config.vault_version = s.config.vault_version.saturating_sub(1);
+            event_tx.send(AppEvent::SaveFailed(format!("config write: {e}"))).ok();
+            return;
+        }
     }
 
-    // Atomic write: temp file in same directory → flush → sync → rename
+    // 2. notes.enc
     let dir = notes_path.parent().unwrap_or_else(|| std::path::Path::new("."));
     match atomic_write(dir, &notes_path, &encrypted) {
         Ok(()) => {

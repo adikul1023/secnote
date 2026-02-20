@@ -39,6 +39,7 @@ struct UnlockedState {
     settings_tab: SettingsTab,
     #[allow(dead_code)]
     settings_changed: bool,
+    #[allow(dead_code)]
     config: AppConfig,
     notes_path: PathBuf,
     #[allow(dead_code)]
@@ -195,6 +196,13 @@ impl eframe::App for SecureNotesApp {
                 if let Some(id) = u.sidebar.selected_note {
                     u.tab_bar.remove(id);
                     u.sidebar.selected_note = u.tab_bar.recents.front().copied();
+                    // PENTEST-F3 FIX: if no tabs remain, zeroize the plaintext
+                    // body so it doesn't linger in memory until next note open.
+                    if u.sidebar.selected_note.is_none() {
+                        use zeroize::Zeroize;
+                        u.editor.active_body.zeroize();
+                        u.editor.active_note_id = None;
+                    }
                 }
             }
         }
@@ -528,17 +536,31 @@ impl SecureNotesApp {
             {
                 let mut s = u.autosave.lock().unwrap();
                 if s.dirty {
-                    if let Some(mk) = &s.master_key {
-                        if let Ok(enc) = encrypt_store(mk, &s.store) {
-                            let dir = u.notes_path.parent()
-                                .unwrap_or_else(|| std::path::Path::new("."));
-                            // Best-effort sync on lock
-                            let _ = crate::save::autosave::atomic_write_pub(
-                                dir,
-                                &u.notes_path,
-                                &enc,
-                            );
-                        }
+                    // Extract mk bytes before mutable borrow of s.config
+                    let mk_bytes_opt = s.master_key.as_ref().map(|m| *m.as_bytes());
+                    let enc_result = s.master_key.as_ref().and_then(|mk| encrypt_store(mk, &s.store).ok());
+                    if let (Some(enc), Some(mut mb)) = (enc_result, mk_bytes_opt) {
+                        // Bump vault_version + HMAC + write config FIRST
+                        s.config.vault_version = s.config.vault_version.saturating_add(1);
+                        let tmp_mk = MasterKey::new(&mut mb);
+                        crate::crypto::keys::compute_config_hmac(&tmp_mk, &mut s.config);
+                        let config_json = serde_json::to_vec_pretty(&s.config)
+                            .unwrap_or_default();
+                        let config_dir = s.config_path.parent()
+                            .unwrap_or_else(|| std::path::Path::new("."));
+                        let _ = crate::save::autosave::atomic_write_pub(
+                            config_dir,
+                            &s.config_path,
+                            &config_json,
+                        );
+                        // Then write notes.enc
+                        let dir = u.notes_path.parent()
+                            .unwrap_or_else(|| std::path::Path::new("."));
+                        let _ = crate::save::autosave::atomic_write_pub(
+                            dir,
+                            &u.notes_path,
+                            &enc,
+                        );
                     }
                     s.dirty = false;
                 }
@@ -546,7 +568,9 @@ impl SecureNotesApp {
             }
 
             let notes_path = u.notes_path.clone();
-            let config = u.config.clone();
+            let config = {
+                u.autosave.lock().unwrap().config.clone()
+            };
             let settings = {
                 u.autosave.lock().unwrap().settings.clone()
             };
@@ -572,7 +596,7 @@ fn build_unlocked_state(
 ) -> AppState {
     let (event_tx, event_rx) = mpsc::channel();
     let initial_theme = settings.theme;
-    let autosave_state = AutoSaveState::new(store, master_key, notes_path.clone(), settings);
+    let autosave_state = AutoSaveState::new(store, master_key, notes_path.clone(), config_path.clone(), config.clone(), settings);
     let autosave = Arc::new(Mutex::new(autosave_state));
 
     start_autosave_thread(autosave.clone(), event_tx);
@@ -621,6 +645,9 @@ fn save_config(path: &std::path::Path, config: &AppConfig) {
 }
 
 fn save_settings(path: &std::path::Path, settings: &AppSettings) {
+    // PENTEST-F2 FIX: use atomic write (same as config.json) and do not panic
+    // on failure — settings.json is non-sensitive but a crash here is a DoS.
     let json = serde_json::to_vec_pretty(settings).expect("settings serialise");
-    std::fs::write(path, json).expect("write settings.json");
+    let dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let _ = crate::save::autosave::atomic_write_pub(dir, path, &json);
 }
