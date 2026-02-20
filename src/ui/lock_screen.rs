@@ -135,6 +135,36 @@ impl LockScreen {
                 State::Error(e) => {
                     ui.colored_label(Color32::RED, e);
                     ui.add_space(8.0);
+                    // If Windows Hello unlock failed (DPAPI mismatch), steer the
+                    // user straight to the recovery key path instead of retrying.
+                    if self.mode == LockMode::Hello && e.contains("unwrap key") {
+                        ui.label(
+                            RichText::new(
+                                "This usually means the Windows DPAPI key changed \
+                                 (e.g. after a Windows Hello reset or system change).\n\
+                                 Use your 24-word recovery key to unlock — it will \
+                                 automatically re-enrol Windows Hello afterwards.",
+                            )
+                            .color(Color32::from_rgb(200, 180, 100)),
+                        );
+                        ui.add_space(8.0);
+                        if ui
+                            .button(
+                                RichText::new("🔑  Switch to recovery key")
+                                    .size(15.0)
+                                    .color(Color32::WHITE),
+                            )
+                            .clicked()
+                        {
+                            self.mode = LockMode::Recovery;
+                            self.state = State::Idle;
+                        }
+                        ui.add_space(16.0);
+                        if ui.small_button("← Retry Windows Hello").clicked() {
+                            self.state = State::Idle;
+                        }
+                        return;
+                    }
                 }
             }
 

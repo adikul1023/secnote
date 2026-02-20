@@ -334,6 +334,67 @@ mod tests {
         assert!(unwrap_key(&mk2, &wrapped, AAD_WINHELLO_MK).is_err());
     }
 
+    /// Diagnostic test: reads the live config.json from %APPDATA%\SecureNotes
+    /// and verifies that DPAPI can decrypt the stored MKEK, then uses it to
+    /// unwrap winhello_wrapped_mk.  Run with:
+    ///   cargo test dpapi_roundtrip_live -- --nocapture --ignored
+    #[test]
+    #[ignore]
+    fn dpapi_roundtrip_live() {
+        use std::env;
+
+        let appdata = env::var("APPDATA").expect("APPDATA must be set");
+        let config_path = std::path::Path::new(&appdata)
+            .join("SecureNotes")
+            .join("config.json");
+
+        println!("Reading config from: {}", config_path.display());
+        let raw = std::fs::read(&config_path).expect("cannot read config.json");
+        let config: crate::store::notes::AppConfig =
+            serde_json::from_slice(&raw).expect("cannot parse config.json");
+
+        println!(
+            "winhello_dpapi_blob: {} bytes, winhello_wrapped_mk: {} bytes",
+            config.winhello_dpapi_blob.len(),
+            config.winhello_wrapped_mk.len()
+        );
+
+        let mut mkek_vec = dpapi_unprotect(&config.winhello_dpapi_blob)
+            .expect("DPAPI failed — blob may have been created under a different user/context");
+
+        println!("DPAPI returned {} bytes", mkek_vec.len());
+        println!("First 4 MKEK bytes (should be non-zero): {:?}", &mkek_vec[..4.min(mkek_vec.len())]);
+
+        assert_eq!(mkek_vec.len(), 32, "MKEK must be 32 bytes — got {}", mkek_vec.len());
+
+        // Check for all-zero MKEK (indicates setup bug where dpapi_protect was
+        // called on already-zeroized bytes)
+        let all_zero = mkek_vec.iter().all(|&b| b == 0);
+        if all_zero {
+            panic!(
+                "DPAPI returned 32 all-zero bytes — the DPAPI blob was created from zeroized memory. \
+                 This is the setup bug: MasterKey::new() zeroized mkek_bytes before dpapi_protect ran. \
+                 Fix: FIX THE SETUP CODE ORDER, then clear config.json and re-setup."
+            );
+        }
+
+        let mut mkek_bytes = [0u8; 32];
+        mkek_bytes.copy_from_slice(&mkek_vec);
+        mkek_vec.zeroize();
+        let mkek = MasterKey::new(&mut mkek_bytes);
+
+        match unwrap_key(&mkek, &config.winhello_wrapped_mk, AAD_WINHELLO_MK) {
+            Ok(_) => println!("SUCCESS: unwrap_key passed — Windows Hello unlock should work"),
+            Err(e) => panic!(
+                "FAILED: unwrap_key error: {e}\n\
+                 The MKEK from DPAPI ({} bytes) does not decrypt winhello_wrapped_mk.\n\
+                 This means the DPAPI master key has changed since setup.\n\
+                 Fix: use the 24-word recovery key to unlock, which will re-enroll Windows Hello.",
+                config.winhello_wrapped_mk.len()
+            ),
+        }
+    }
+
     // ── AAD binding: security regression tests ─────────────────────────────
     //
     // These tests exist to catch any future refactor that accidentally removes
